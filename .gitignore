@@ -1,0 +1,29 @@
+# Abhängigkeiten
+frontend/node_modules/
+main-api/venv/
+
+# Build-Artefakte
+frontend/dist/
+
+# Runtime-Daten (Datenbank, Uploads, Secrets)
+main-api/instance/
+
+# Logs
+logs/
+
+# Python-Cache
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Env-Dateien (außer .example)
+.env
+**/.env
+
+# macOS
+.DS_Store
+**/.DS_Store
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,203 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Axion</Name>
+  <Repository>basti97420/axion:latest</Repository>
+  <Registry>https://hub.docker.com/r/basti97420/axion/</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Overview>
+    Self-hosted Projektmanagement mit Issue-Tracking (Kanban), iCloud-Kalender-Sync,
+    Worklog/Zeiterfassung, Wiki und KI-Assistent.
+    Standard-Login: admin / admin (bitte nach erstem Login ändern).
+  </Overview>
+  <Category>Productivity: Tools:</Category>
+  <WebUI>http://[IP]:[PORT:80]/</WebUI>
+  <Icon>https://raw.githubusercontent.com/Basti97420/Axion/main/frontend/public/favicon.ico</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <DonateText/>
+  <DonateLink/>
+
+  <!-- Port -->
+  <Config
+    Name="Web UI Port"
+    Target="80"
+    Default="80"
+    Mode="tcp"
+    Description="Port für das Web-Interface"
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false">80</Config>
+
+  <!-- Pfade -->
+  <Config
+    Name="Hauptdatenbank &amp; Configs"
+    Target="/app/main-api/instance"
+    Default="/mnt/user/appdata/axion/main"
+    Mode="rw"
+    Description="Speichert die Hauptdatenbank, KI-Konfiguration und Telegram-Konfiguration"
+    Type="Path"
+    Display="always"
+    Required="true"
+    Mask="false">/mnt/user/appdata/axion/main</Config>
+
+  <!-- iCloud Kalender (optional) -->
+  <Config
+    Name="iCloud E-Mail"
+    Target="ICLOUD_USERNAME"
+    Default=""
+    Mode=""
+    Description="iCloud E-Mail-Adresse für Kalender-Sync (optional)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="iCloud App-Passwort"
+    Target="ICLOUD_APP_PASSWORD"
+    Default=""
+    Mode=""
+    Description="App-spezifisches Passwort aus Apple-ID-Einstellungen → appleid.apple.com → Sicherheit → App-spezifische Passwörter"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="iCloud Kalender-Name"
+    Target="ICLOUD_CALENDAR_NAME"
+    Default="Axion"
+    Mode=""
+    Description="Name des iCloud-Kalenders der synchronisiert werden soll"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">Axion</Config>
+
+  <!-- KI-Assistent -->
+  <Config
+    Name="KI-Provider"
+    Target="AI_PROVIDER"
+    Default="ollama"
+    Mode=""
+    Description="ollama (lokal) oder claude (Anthropic API)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">ollama</Config>
+
+  <Config
+    Name="Ollama URL"
+    Target="OLLAMA_URL"
+    Default="http://host.docker.internal:11434"
+    Mode=""
+    Description="URL des Ollama-Servers. host.docker.internal zeigt auf den Unraid-Host selbst."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">http://host.docker.internal:11434</Config>
+
+  <Config
+    Name="Ollama Modell"
+    Target="OLLAMA_MODEL"
+    Default="llama3.2"
+    Mode=""
+    Description="Name des zu verwendenden Ollama-Modells"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">llama3.2</Config>
+
+  <Config
+    Name="Claude API Key"
+    Target="CLAUDE_API_KEY"
+    Default=""
+    Mode=""
+    Description="Anthropic API-Key (nur erforderlich wenn KI-Provider = claude)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="Claude Modell"
+    Target="CLAUDE_MODEL"
+    Default="claude-sonnet-4-6"
+    Mode=""
+    Description="Claude-Modellname (z.B. claude-sonnet-4-6)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">claude-sonnet-4-6</Config>
+
+  <!-- Telegram Bot (optional) -->
+  <Config
+    Name="Telegram Bot Token"
+    Target="TELEGRAM_BOT_TOKEN"
+    Default=""
+    Mode=""
+    Description="Bot-Token von @BotFather (optional – für Telegram-Integration)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="true"></Config>
+
+  <Config
+    Name="Telegram Chat ID"
+    Target="TELEGRAM_CHAT_ID"
+    Default=""
+    Mode=""
+    Description="Telegram Chat-ID (eigene ID, z.B. über @userinfobot ermitteln)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Telegram Standard-Projekt ID"
+    Target="TELEGRAM_DEFAULT_PROJECT_ID"
+    Default=""
+    Mode=""
+    Description="Projekt-ID für via Telegram erstellte Issues (optional)"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"></Config>
+
+  <Config
+    Name="Telegram: Benachrichtigung bei Issue-Erstellung"
+    Target="TELEGRAM_NOTIFY_ON_CREATE"
+    Default="true"
+    Mode=""
+    Description="true = Benachrichtigung senden wenn ein neues Issue erstellt wird"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">true</Config>
+
+  <Config
+    Name="Telegram: Benachrichtigung bei Status-Änderung"
+    Target="TELEGRAM_NOTIFY_ON_STATUS_CHANGE"
+    Default="true"
+    Mode=""
+    Description="true = Benachrichtigung senden wenn sich der Issue-Status ändert"
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">true</Config>
+
+  <Config
+    Name="Telegram: Benachrichtigungs-Intervall (Minuten)"
+    Target="TELEGRAM_NOTIFY_INTERVAL_MIN"
+    Default="5"
+    Mode=""
+    Description="Benachrichtigungen werden gesammelt und alle N Minuten als eine Nachricht gesendet. 0 = sofort senden."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false">5</Config>
+
+</Container>

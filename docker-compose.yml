@@ -1,0 +1,18 @@
+services:
+  axion:
+    build: .
+    image: basti97420/axion:latest
+    ports:
+      - "80:80"
+    volumes:
+      - ${AXION_DATA:-./data}/main:/app/main-api/instance
+    environment:
+      - ICLOUD_USERNAME=${ICLOUD_USERNAME:-}
+      - ICLOUD_APP_PASSWORD=${ICLOUD_APP_PASSWORD:-}
+      - ICLOUD_CALENDAR_NAME=${ICLOUD_CALENDAR_NAME:-PlanWiki}
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2}
+    env_file:
+      - path: .env
+        required: false
+    restart: unless-stopped
