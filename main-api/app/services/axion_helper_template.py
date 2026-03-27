@@ -139,6 +139,31 @@ def read_my_file(filename):
         return f.read()
 
 
+def list_script_workspaces():
+    """Listet alle Script-Workspaces im Projekt (nur lesen)."""
+    base = os.path.join(os.environ.get("AXION_INSTANCE_PATH", ""),
+                        "python-scripts", str(_proj))
+    result = []
+    if os.path.isdir(base):
+        for name in os.listdir(base):
+            ws_path = os.path.join(base, name)
+            if os.path.isdir(ws_path):
+                files = [f for f in os.listdir(ws_path)
+                         if os.path.isfile(os.path.join(ws_path, f))
+                         and os.path.splitext(f)[1].lower() in (".md", ".txt", ".csv", ".py")]
+                result.append({{"name": name, "files": files}})
+    return result
+
+
+def read_script_file(workspace_name, filename):
+    """Liest eine Datei aus einem anderen Script-Workspace."""
+    base = os.path.join(os.environ.get("AXION_INSTANCE_PATH", ""),
+                        "python-scripts", str(_proj))
+    path = os.path.join(base, workspace_name, filename)
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
 def notify_telegram(message):
     """Sendet eine Telegram-Benachrichtigung.
 

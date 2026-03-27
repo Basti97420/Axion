@@ -120,7 +120,12 @@ def _run_inner(script_id, run_id, code_override=None, inject_vars=False):
         return
 
     instance_path = current_app.instance_path
-    workspace_dir = os.path.join(instance_path, 'python-scripts', str(script.project_id))
+
+    # Per-Script-Workspace
+    from slugify import slugify
+    slug = slugify(script.name or 'script', max_length=40)
+    workspace_dir = os.path.join(instance_path, 'python-scripts',
+                                 str(script.project_id), f"{script.id}-{slug}")
     os.makedirs(workspace_dir, exist_ok=True)
 
     # Code bestimmen: Override > cells > code

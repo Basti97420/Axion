@@ -278,87 +278,107 @@ function AgentForm({ agent, onSave, onDelete, onRun, running }) {
 
 function FileList({ agentId, refreshKey }) {
   const [files, setFiles] = useState([])
-  const [expanded, setExpanded] = useState({})
+  const [previews, setPreviews] = useState({})
+  const [previewContent, setPreviewContent] = useState({})
 
   useEffect(() => {
     if (!agentId) return
     kiAgentsApi.getFiles(agentId).then(({ data }) => setFiles(data)).catch(() => {})
   }, [agentId, refreshKey])
 
-  async function toggleExpand(filename) {
-    if (expanded[filename] !== undefined) {
-      setExpanded((e) => { const n = { ...e }; delete n[filename]; return n })
-    } else {
+  async function togglePreview(filename) {
+    if (previews[filename]) {
+      setPreviews((p) => ({ ...p, [filename]: false }))
+      return
+    }
+    if (!previewContent[filename]) {
       try {
         const r = await fetch(kiAgentsApi.fileUrl(agentId, filename), { credentials: 'include' })
         const text = await r.text()
-        setExpanded((e) => ({ ...e, [filename]: text.slice(0, 3000) }))
+        setPreviewContent((c) => ({ ...c, [filename]: text.slice(0, 5000) }))
       } catch {
-        setExpanded((e) => ({ ...e, [filename]: '[Lesefehler]' }))
+        setPreviewContent((c) => ({ ...c, [filename]: '(Fehler beim Laden)' }))
       }
     }
+    setPreviews((p) => ({ ...p, [filename]: true }))
   }
 
   async function handleDelete(filename) {
-    if (!confirm(`Datei "${filename}" löschen?`)) return
+    if (!confirm(`Datei "${filename}" wirklich löschen?`)) return
     await kiAgentsApi.deleteFile(agentId, filename)
     setFiles((f) => f.filter((x) => x.filename !== filename))
-    setExpanded((e) => { const n = { ...e }; delete n[filename]; return n })
+    setPreviews((p) => ({ ...p, [filename]: false }))
   }
 
-  if (!files.length) return <p className="text-xs text-gray-400">Noch keine Dateien.</p>
+  function formatSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+
+  if (!files.length) {
+    return (
+      <div className="text-center py-12 text-gray-400 text-sm">
+        <p className="mb-1 font-medium">Keine Workspace-Dateien</p>
+        <p className="text-xs">Dateien werden nach Agent-Runs hier angezeigt</p>
+      </div>
+    )
+  }
 
   return (
-    <ul className="space-y-2">
+    <div className="space-y-2">
       {files.map((f) => {
-        const isOpen = expanded[f.filename] !== undefined
         const ext = f.filename.split('.').pop().toLowerCase()
+        const isMd = ext === 'md'
+        const badgeColor = isMd
+          ? 'bg-purple-50 text-purple-500'
+          : ext === 'csv'
+          ? 'bg-green-50 text-green-500'
+          : 'bg-gray-50 text-gray-400'
+
         return (
-          <li key={f.filename} className="border border-gray-200 rounded-lg overflow-hidden">
-            <div className="flex items-center justify-between px-3 py-2 bg-gray-50">
-              <button
-                onClick={() => toggleExpand(f.filename)}
-                className="flex items-center gap-2 text-left flex-1 min-w-0"
-              >
-                <span className="text-xs shrink-0">{isOpen ? '▼' : '▶'}</span>
-                <span className="text-xs font-mono text-gray-700 truncate">{f.filename}</span>
-                <span className="text-xs text-gray-400 shrink-0">({Math.round(f.size / 1024 * 10) / 10} KB)</span>
-              </button>
-              <div className="flex gap-2 shrink-0 ml-2">
-                <a
-                  href={kiAgentsApi.fileUrl(agentId, f.filename)}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-primary-600 hover:underline"
+          <div key={f.filename} className="border border-gray-100 rounded-xl overflow-hidden hover:border-gray-200 transition-colors">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${badgeColor}`}>
+                {ext.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{f.filename}</p>
+                <p className="text-xs text-gray-400">
+                  {formatSize(f.size)} · {new Date(f.modified_at + 'Z').toLocaleString('de-DE')}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => togglePreview(f.filename)}
+                  className="text-xs text-primary-600 hover:text-primary-800"
                 >
-                  Öffnen
-                </a>
+                  {previews[f.filename] ? 'Einklappen' : 'Vorschau'}
+                </button>
                 <button
                   onClick={() => handleDelete(f.filename)}
-                  className="text-xs text-red-500 hover:underline"
+                  className="text-xs text-gray-300 hover:text-red-500 transition-colors"
                 >
                   Löschen
                 </button>
               </div>
             </div>
-            {isOpen && (
-              <div className="px-3 py-2 border-t border-gray-100 max-h-64 overflow-y-auto">
-                {ext === 'md' ? (
+            {previews[f.filename] && (
+              <div className="border-t border-gray-100 px-4 py-3 bg-slate-50">
+                {isMd ? (
                   <div className="prose prose-sm max-w-none">
-                    <ReactMarkdown>{expanded[f.filename]}</ReactMarkdown>
+                    <ReactMarkdown>{previewContent[f.filename] || ''}</ReactMarkdown>
                   </div>
                 ) : (
-                  <pre className="text-xs font-mono text-gray-700 whitespace-pre-wrap">{expanded[f.filename]}</pre>
-                )}
-                {expanded[f.filename]?.length >= 3000 && (
-                  <p className="text-xs text-gray-400 mt-1">… (Vorschau auf 3000 Zeichen begrenzt)</p>
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono overflow-x-auto leading-relaxed">
+                    {previewContent[f.filename] || ''}
+                  </pre>
                 )}
               </div>
             )}
-          </li>
+          </div>
         )
       })}
-    </ul>
+    </div>
   )
 }
 
@@ -680,40 +700,36 @@ export default function KiAgentsPage() {
         {(creating || selected) && (
           <>
             {/* Header */}
-            <div className="px-6 pt-6 pb-0">
-              <h2 className="text-lg font-bold text-gray-900 mb-4">
+            <div className="flex items-center justify-between mb-4 gap-4 px-6 pt-6">
+              <h2 className="text-lg font-bold text-gray-900 truncate">
                 {creating ? 'Neuer KI-Agent' : selected.name}
               </h2>
-              {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
-                  {error}
-                </div>
-              )}
-            </div>
-
-            {/* Tab-Leiste (nur bei bestehendem Agent) */}
-            {selected && (
-              <div className="px-6 border-b border-gray-200">
-                <div className="flex gap-0">
+              {selected && (
+                <div className="flex gap-1 p-1 bg-gray-100 rounded-full shrink-0">
                   {TABS.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
                         activeTab === tab.id
-                          ? 'border-primary-600 text-primary-700'
-                          : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
                       {tab.label}
                     </button>
                   ))}
                 </div>
+              )}
+            </div>
+            {error && (
+              <div className="mx-6 mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {error}
               </div>
             )}
 
             {/* Tab-Inhalt */}
-            <div className="p-6">
+            <div className="px-6 pb-6">
               {/* Konfiguration */}
               {(activeTab === 'config' || creating) && (
                 <>

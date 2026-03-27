@@ -17,40 +17,32 @@ function IssueChip({ issue, onRemove }) {
   )
 }
 
-export default function DependenciesSection({ issueId, projectId }) {
+export default function DependenciesSection({ issueId }) {
   const allIssues = useIssueStore((s) => s.issues)
-  const [deps, setDeps] = useState({ blocks: [], blocked_by: [] })
+  const [blocks, setBlocks] = useState([])
   const [search, setSearch] = useState('')
-  const [addType, setAddType] = useState(null) // 'blocks' | 'blocked_by'
+  const [adding, setAdding] = useState(false)
 
   useEffect(() => {
     issuesApi.getDependencies(issueId)
-      .then(({ data }) => setDeps(data))
+      .then(({ data }) => setBlocks(data.blocks))
       .catch(() => {})
   }, [issueId])
 
-  async function handleAdd(targetId, type) {
-    await issuesApi.addDependency(issueId, { target_id: targetId, type }).catch(() => {})
+  async function handleAdd(targetId) {
+    await issuesApi.addDependency(issueId, { target_id: targetId, type: 'blocks' }).catch(() => {})
     const { data } = await issuesApi.getDependencies(issueId)
-    setDeps(data)
+    setBlocks(data.blocks)
     setSearch('')
-    setAddType(null)
+    setAdding(false)
   }
 
-  async function handleRemove(targetId, type) {
-    await issuesApi.removeDependency(issueId, targetId, type).catch(() => {})
-    setDeps((prev) => ({
-      ...prev,
-      [type === 'blocks' ? 'blocks' : 'blocked_by']:
-        prev[type === 'blocks' ? 'blocks' : 'blocked_by'].filter((i) => i.id !== targetId),
-    }))
+  async function handleRemove(targetId) {
+    await issuesApi.removeDependency(issueId, targetId, 'blocks').catch(() => {})
+    setBlocks((prev) => prev.filter((i) => i.id !== targetId))
   }
 
-  const existingIds = new Set([
-    issueId,
-    ...deps.blocks.map((i) => i.id),
-    ...deps.blocked_by.map((i) => i.id),
-  ])
+  const existingIds = new Set([issueId, ...blocks.map((i) => i.id)])
 
   const filtered = search.length >= 1
     ? allIssues.filter(
@@ -59,16 +51,12 @@ export default function DependenciesSection({ issueId, projectId }) {
       ).slice(0, 6)
     : []
 
-  if (deps.blocks.length === 0 && deps.blocked_by.length === 0 && !addType) {
+  if (blocks.length === 0 && !adding) {
     return (
-      <div className="mb-5">
+      <div>
         <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-gray-700">Abhängigkeiten</h2>
-          <div className="flex gap-1">
-            <button onClick={() => setAddType('blocks')} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert</button>
-            <span className="text-gray-300">|</span>
-            <button onClick={() => setAddType('blocked_by')} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert durch</button>
-          </div>
+          <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Abhängigkeiten</h2>
+          <button onClick={() => setAdding(true)} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert</button>
         </div>
         <p className="text-xs text-gray-400">Keine Abhängigkeiten</p>
       </div>
@@ -76,45 +64,25 @@ export default function DependenciesSection({ issueId, projectId }) {
   }
 
   return (
-    <div className="mb-5">
+    <div>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold text-gray-700">Abhängigkeiten</h2>
-        <div className="flex gap-1">
-          <button onClick={() => setAddType('blocks')} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert</button>
-          <span className="text-gray-300">|</span>
-          <button onClick={() => setAddType('blocked_by')} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert durch</button>
-        </div>
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Abhängigkeiten</h2>
+        <button onClick={() => setAdding(true)} className="text-xs text-primary-600 hover:text-primary-700 font-medium">+ Blockiert</button>
       </div>
 
-      {deps.blocks.length > 0 && (
+      {blocks.length > 0 && (
         <div className="mb-3">
           <p className="text-xs text-gray-500 mb-1.5 font-medium">Blockiert:</p>
           <div className="flex flex-wrap gap-1.5">
-            {deps.blocks.map((i) => (
-              <IssueChip key={i.id} issue={i} onRemove={() => handleRemove(i.id, 'blocks')} />
+            {blocks.map((i) => (
+              <IssueChip key={i.id} issue={i} onRemove={() => handleRemove(i.id)} />
             ))}
           </div>
         </div>
       )}
 
-      {deps.blocked_by.length > 0 && (
-        <div className="mb-3">
-          <p className="text-xs text-gray-500 mb-1.5 font-medium">
-            🔒 Blockiert durch:
-          </p>
-          <div className="flex flex-wrap gap-1.5">
-            {deps.blocked_by.map((i) => (
-              <IssueChip key={i.id} issue={i} onRemove={() => handleRemove(i.id, 'blocked_by')} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {addType && (
+      {adding && (
         <div className="relative mt-2">
-          <p className="text-xs text-gray-500 mb-1">
-            {addType === 'blocks' ? 'Welches Issue blockiert dieses hier?' : 'Durch welches Issue wird dieses blockiert?'}
-          </p>
           <input
             autoFocus
             value={search}
@@ -127,7 +95,7 @@ export default function DependenciesSection({ issueId, projectId }) {
               {filtered.map((i) => (
                 <li
                   key={i.id}
-                  onClick={() => handleAdd(i.id, addType)}
+                  onClick={() => handleAdd(i.id)}
                   className="px-3 py-2 hover:bg-gray-50 cursor-pointer flex items-center gap-2 text-sm"
                 >
                   <span className="text-xs text-gray-400 font-mono">#{i.id}</span>
@@ -137,7 +105,7 @@ export default function DependenciesSection({ issueId, projectId }) {
               ))}
             </ul>
           )}
-          <button onClick={() => { setAddType(null); setSearch('') }} className="mt-1.5 text-xs text-gray-400 hover:text-gray-600">Abbrechen</button>
+          <button onClick={() => { setAdding(false); setSearch('') }} className="mt-1.5 text-xs text-gray-400 hover:text-gray-600">Abbrechen</button>
         </div>
       )}
     </div>

@@ -1,9 +1,18 @@
+import os
 import threading
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, send_file
 from flask_login import login_required
+from werkzeug.utils import secure_filename
 from app import db
 from app.models.python_script import PythonScript, PythonScriptRun
+
+
+def _script_workspace_dir(script):
+    from slugify import slugify
+    slug = slugify(script.name or 'script', max_length=40)
+    return os.path.join(current_app.instance_path, 'python-scripts',
+                        str(script.project_id), f"{script.id}-{slug}")
 
 bp = Blueprint('python_scripts', __name__)
 internal_bp = Blueprint('internal_scripts', __name__)
@@ -162,6 +171,55 @@ def get_runs(script_id):
     runs = PythonScriptRun.query.filter_by(script_id=script_id)\
         .order_by(PythonScriptRun.started_at.desc()).limit(20).all()
     return jsonify([r.to_dict() for r in runs])
+
+
+# ---------------------------------------------------------------------------
+# Workspace-Dateien
+# ---------------------------------------------------------------------------
+
+@bp.get('/api/python-scripts/<int:script_id>/files')
+@login_required
+def list_script_files(script_id):
+    script = db.get_or_404(PythonScript, script_id)
+    ws = _script_workspace_dir(script)
+    if not os.path.isdir(ws):
+        return jsonify([])
+    files = []
+    for fn in sorted(os.listdir(ws)):
+        fp = os.path.join(ws, fn)
+        if os.path.isfile(fp) and fn.lower().endswith(('.md', '.txt', '.csv', '.py')):
+            stat = os.stat(fp)
+            files.append({
+                'filename': fn,
+                'size': stat.st_size,
+                'modified_at': datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+            })
+    return jsonify(files)
+
+
+@bp.get('/api/python-scripts/<int:script_id>/files/<path:filename>')
+@login_required
+def get_script_file(script_id, filename):
+    script = db.get_or_404(PythonScript, script_id)
+    ws = _script_workspace_dir(script)
+    safe_fn = secure_filename(filename)
+    path = os.path.join(ws, safe_fn)
+    if not os.path.isfile(path):
+        return jsonify({'error': 'Datei nicht gefunden'}), 404
+    return send_file(path, as_attachment=False)
+
+
+@bp.delete('/api/python-scripts/<int:script_id>/files/<path:filename>')
+@login_required
+def delete_script_file(script_id, filename):
+    script = db.get_or_404(PythonScript, script_id)
+    ws = _script_workspace_dir(script)
+    safe_fn = secure_filename(filename)
+    path = os.path.join(ws, safe_fn)
+    if not os.path.isfile(path):
+        return jsonify({'error': 'Datei nicht gefunden'}), 404
+    os.remove(path)
+    return jsonify({'ok': True})
 
 
 # ---------------------------------------------------------------------------

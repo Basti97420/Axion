@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useParams } from 'react-router-dom'
+import ReactMarkdown from 'react-markdown'
 import CodeMirror from '@uiw/react-codemirror'
 import { python } from '@codemirror/lang-python'
 import { pythonScriptsApi } from '../api/pythonScriptsApi'
@@ -738,6 +739,124 @@ function RunList({ runs }) {
 // ---------------------------------------------------------------------------
 // Haupt-Seite
 // ---------------------------------------------------------------------------
+function FileList({ scriptId }) {
+  const [files, setFiles] = useState([])
+  const [previews, setPreviews] = useState({})
+  const [previewContent, setPreviewContent] = useState({})
+
+  useEffect(() => {
+    pythonScriptsApi.getFiles(scriptId).then(({ data }) => setFiles(data)).catch(() => {})
+  }, [scriptId])
+
+  async function togglePreview(fn) {
+    if (previews[fn]) {
+      setPreviews((p) => ({ ...p, [fn]: false }))
+      return
+    }
+    if (!previewContent[fn]) {
+      try {
+        const res = await fetch(pythonScriptsApi.fileUrl(scriptId, fn), { credentials: 'include' })
+        const text = await res.text()
+        setPreviewContent((c) => ({ ...c, [fn]: text.slice(0, 5000) }))
+      } catch {
+        setPreviewContent((c) => ({ ...c, [fn]: '(Fehler beim Laden)' }))
+      }
+    }
+    setPreviews((p) => ({ ...p, [fn]: true }))
+  }
+
+  async function handleDelete(fn) {
+    if (!confirm(`"${fn}" wirklich löschen?`)) return
+    await pythonScriptsApi.deleteFile(scriptId, fn)
+    setFiles((f) => f.filter((x) => x.filename !== fn))
+    setPreviews((p) => ({ ...p, [fn]: false }))
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return `${bytes} B`
+    return `${(bytes / 1024).toFixed(1)} KB`
+  }
+
+  function refresh() {
+    pythonScriptsApi.getFiles(scriptId).then(({ data }) => setFiles(data)).catch(() => {})
+  }
+
+  if (files.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400 text-sm">
+        <p className="mb-1 font-medium">Keine Dateien im Workspace</p>
+        <p className="text-xs">Schreibe Dateien mit <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-gray-600">axion.write_file()</code></p>
+        <button onClick={refresh} className="mt-3 text-xs text-primary-600 hover:text-primary-700">Aktualisieren</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-2">
+      <div className="flex justify-end mb-1">
+        <button onClick={refresh} className="text-xs text-primary-600 hover:text-primary-700">Aktualisieren</button>
+      </div>
+      {files.map((f) => {
+        const ext = f.filename.split('.').pop().toLowerCase()
+        const isMd = ext === 'md'
+        const badgeColor = ext === 'py'
+          ? 'bg-blue-50 text-blue-500'
+          : isMd
+          ? 'bg-purple-50 text-purple-500'
+          : ext === 'csv'
+          ? 'bg-green-50 text-green-500'
+          : 'bg-gray-50 text-gray-400'
+
+        return (
+          <div key={f.filename} className="border border-gray-100 rounded-xl overflow-hidden hover:border-gray-200 transition-colors">
+            <div className="flex items-center gap-3 px-4 py-3">
+              <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${badgeColor}`}>
+                {ext.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-gray-900 truncate">{f.filename}</p>
+                </div>
+                <p className="text-xs text-gray-400">
+                  {formatSize(f.size)} · {new Date(f.modified_at + 'Z').toLocaleString('de-DE')}
+                </p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <button
+                  onClick={() => togglePreview(f.filename)}
+                  className="text-xs text-primary-600 hover:text-primary-800"
+                >
+                  {previews[f.filename] ? 'Einklappen' : 'Vorschau'}
+                </button>
+                <button
+                  onClick={() => handleDelete(f.filename)}
+                  className="text-xs text-gray-300 hover:text-red-500 transition-colors"
+                >
+                  Löschen
+                </button>
+              </div>
+            </div>
+            {previews[f.filename] && (
+              <div className="border-t border-gray-100 px-4 py-3 bg-slate-50">
+                {isMd ? (
+                  <div className="prose prose-sm max-w-none">
+                    <ReactMarkdown>{previewContent[f.filename] || ''}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono overflow-x-auto leading-relaxed">
+                    {previewContent[f.filename] || ''}
+                  </pre>
+                )}
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
 export default function PythonScriptsPage() {
   const { projectId } = useParams()
   const [scripts, setScripts] = useState([])
@@ -746,6 +865,7 @@ export default function PythonScriptsPage() {
   const [runs, setRuns] = useState([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
+  const [tab, setTab] = useState('editor') // 'editor' | 'runs' | 'files'
   const [cellOutputs, setCellOutputs] = useState({})   // { cellIndex: run }
   const [cellRunning, setCellRunning] = useState(null)  // cellIndex | null
 
@@ -841,12 +961,14 @@ export default function PythonScriptsPage() {
     setSelected(sc)
     setCreating(false)
     setError(null)
+    setTab('editor')
   }
 
   function startCreate() {
     setSelected(null)
     setCreating(true)
     setError(null)
+    setTab('editor')
   }
 
   const activeScript = creating ? null : selected
@@ -902,9 +1024,33 @@ export default function PythonScriptsPage() {
 
         {(creating || selected) && (
           <>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">
-              {creating ? 'Neues Python Script' : selected.name}
-            </h2>
+            {/* Header + Tabs */}
+            <div className="flex items-center justify-between mb-4 gap-4">
+              <h2 className="text-lg font-bold text-gray-900 truncate">
+                {creating ? 'Neues Python Script' : selected.name}
+              </h2>
+              {selected && (
+                <div className="flex gap-1 p-1 bg-gray-100 rounded-full shrink-0">
+                  {[
+                    { key: 'editor', label: 'Editor' },
+                    { key: 'runs',   label: `Protokoll (${runs.length})` },
+                    { key: 'files',  label: 'Dateien' },
+                  ].map(({ key, label }) => (
+                    <button
+                      key={key}
+                      onClick={() => setTab(key)}
+                      className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                        tab === key
+                          ? 'bg-white text-gray-900 shadow-sm'
+                          : 'text-gray-500 hover:text-gray-700'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {error && (
               <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
@@ -912,22 +1058,23 @@ export default function PythonScriptsPage() {
               </div>
             )}
 
-            <ScriptForm
-              key={creating ? 'new' : (selected?.id ?? 'none')}
-              script={activeScript}
-              onSave={handleSave}
-              onDelete={handleDelete}
-              onRun={handleRun}
-              running={running}
-              onRunCell={selected ? handleRunCell : null}
-              cellRunning={cellRunning}
-              cellOutputs={cellOutputs}
-            />
+            {(tab === 'editor' || creating) && (
+              <ScriptForm
+                key={creating ? 'new' : (selected?.id ?? 'none')}
+                script={activeScript}
+                onSave={handleSave}
+                onDelete={handleDelete}
+                onRun={handleRun}
+                running={running}
+                onRunCell={selected ? handleRunCell : null}
+                cellRunning={cellRunning}
+                cellOutputs={cellOutputs}
+              />
+            )}
 
-            {selected && (
-              <div className="mt-6 border-t border-gray-200 pt-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-gray-700">🕐 Protokoll</h3>
+            {tab === 'runs' && selected && (
+              <div>
+                <div className="flex justify-end mb-3">
                   <button
                     onClick={() => pythonScriptsApi.getRuns(selected.id).then(({ data }) => setRuns(data))}
                     className="text-xs text-primary-600 hover:underline"
@@ -937,6 +1084,10 @@ export default function PythonScriptsPage() {
                 </div>
                 <RunList runs={runs} />
               </div>
+            )}
+
+            {tab === 'files' && selected && (
+              <FileList scriptId={selected.id} />
             )}
           </>
         )}
