@@ -25,8 +25,10 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
 
   return (
     <div
-      className={`px-3 py-2.5 hover:bg-gray-50 border-l-2 transition-colors ${
-        selected ? 'bg-primary-50 border-l-primary-500' : 'border-l-transparent'
+      className={`px-3 py-2.5 border-l-2 transition-colors ${
+        selected
+          ? 'bg-white border-l-primary-400 shadow-sm'
+          : 'border-l-transparent hover:bg-gray-50 hover:border-l-gray-200'
       } ${isAnyDraggable ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
       onClick={isAnyDraggable ? undefined : () => navigate(`/projects/${projectId}/issues/${issue.id}`)}
       data-fc-event={fcEventData}

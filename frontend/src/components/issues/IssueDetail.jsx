@@ -19,29 +19,38 @@ import { useIssueStore } from '../../store/issueStore'
 import { useAuthStore } from '../../store/authStore'
 import DependenciesSection from './DependenciesSection'
 
+const ACTION_DOT = {
+  status_changed: 'bg-blue-400',
+  commented:      'bg-green-400',
+  reverted:       'bg-orange-400',
+  ki_update:      'bg-purple-400',
+  ki_comment:     'bg-purple-400',
+  ki_create:      'bg-purple-400',
+}
+
 function SubtasksBlock({ subtasks, projectId }) {
   const done = subtasks.filter((s) => s.status === 'done').length
   const pct = subtasks.length > 0 ? Math.round((done / subtasks.length) * 100) : 0
   return (
-    <div className="mb-5">
+    <div>
       <div className="flex items-center justify-between mb-2">
-        <h2 className="text-sm font-semibold text-gray-700">
+        <h2 className="text-xs font-semibold text-gray-400 uppercase tracking-wide">
           Unteraufgaben ({done}/{subtasks.length})
         </h2>
-        <span className="text-xs text-gray-400">{pct} % abgeschlossen</span>
+        <span className="text-xs text-gray-400">{pct} %</span>
       </div>
-      <div className="w-full bg-gray-200 rounded-full h-1.5 mb-3">
-        <div className="bg-primary-500 h-1.5 rounded-full transition-all" style={{ width: `${pct}%` }} />
+      <div className="w-full bg-gray-100 rounded-full h-1 mb-3">
+        <div className="bg-primary-500 h-1 rounded-full transition-all" style={{ width: `${pct}%` }} />
       </div>
-      <div className="space-y-1">
+      <div className="space-y-0.5">
         {subtasks.map((st) => (
           <Link
             key={st.id}
             to={`/projects/${projectId}/issues/${st.id}`}
-            className="flex items-center gap-2 py-1 px-2 rounded hover:bg-gray-50 group"
+            className="flex items-center gap-2 py-1.5 px-2 rounded-lg hover:bg-gray-50 group"
           >
-            <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[st.status] || 'bg-gray-400'}`} />
-            <span className={`text-sm flex-1 min-w-0 truncate group-hover:text-primary-600 ${st.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+            <span className={`w-2 h-2 rounded-full shrink-0 ${STATUS_DOT[st.status] || 'bg-gray-300'}`} />
+            <span className={`text-sm flex-1 min-w-0 truncate group-hover:text-primary-600 ${st.status === 'done' ? 'line-through text-gray-400' : 'text-gray-700'}`}>
               #{st.id} {st.title}
             </span>
             <span className="text-xs text-gray-400 shrink-0">{PRIORITY_ICONS[st.priority]}</span>
@@ -58,6 +67,16 @@ function formatFileSize(bytes) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function MetaItem({ label, value }) {
+  if (!value) return null
+  return (
+    <span className="flex items-center gap-1.5 text-sm">
+      <span className="text-gray-400">{label}</span>
+      <span className="text-gray-700 font-medium">{value}</span>
+    </span>
+  )
+}
+
 export default function IssueDetail({ issue, projectId }) {
   const navigate = useNavigate()
   const { upsertIssue, removeIssue } = useIssueStore()
@@ -71,13 +90,23 @@ export default function IssueDetail({ issue, projectId }) {
   const allIssues = useIssueStore((s) => s.issues)
   const [newComment, setNewComment] = useState('')
   const [showManualEntry, setShowManualEntry] = useState(false)
-  const [tab, setTab] = useState('activity') // 'activity' | 'comments' | 'worklog' | 'attachments'
+  const [tab, setTab] = useState('activity')
   const fileInputRef = useRef(null)
+  const menuRef = useRef(null)
   const [editOpen, setEditOpen] = useState(false)
   const [icloudOpen, setIcloudOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [statusError, setStatusError] = useState('')
   const [showPreview, setShowPreview] = useState({})
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false)
+    }
+    if (menuOpen) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen])
 
   useEffect(() => {
     issuesApi.getActivity(issue.id).then(({ data }) => setActivity(data)).catch(() => {})
@@ -160,7 +189,7 @@ export default function IssueDetail({ issue, projectId }) {
       const { data: updated } = await issuesApi.patchPriority(issue.id, newPriority)
       upsertIssue(updated)
     } catch {
-      // silent – kein kritischer Fehler
+      // silent
     }
   }
 
@@ -189,349 +218,404 @@ export default function IssueDetail({ issue, projectId }) {
     setComments((prev) => prev.filter((c) => c.id !== cid))
   }
 
-  const field = (label, value) => (
-    <div>
-      <dt className="text-xs font-medium text-gray-500 mb-0.5">{label}</dt>
-      <dd className="text-sm text-gray-900">{value || '—'}</dd>
-    </div>
-  )
+  const tabs = [
+    { key: 'activity',    label: 'Aktivität',    count: activity.length },
+    { key: 'comments',    label: 'Kommentare',   count: comments.length },
+    { key: 'worklog',     label: 'Zeiterfassung', count: worklogs.length },
+    { key: 'attachments', label: 'Anhänge',      count: attachments.length },
+  ]
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-6">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div className="min-w-0">
-            <p className="text-xs text-gray-400 font-mono mb-1">#{issue.id}</p>
-            <h1 className="text-xl font-semibold text-gray-900">{issue.title}</h1>
+      <div className="max-w-3xl mx-auto px-6 py-8">
+
+        {/* ── Header ── */}
+        <div className="flex items-start justify-between gap-4 mb-6">
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-xs font-mono text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded">
+                #{issue.id}
+              </span>
+              <span className="text-xs text-gray-400 capitalize">{issue.type}</span>
+            </div>
+            <h1 className="text-2xl font-bold text-gray-900 leading-snug">{issue.title}</h1>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button size="sm" variant="secondary" onClick={() => setIcloudOpen(true)}>📅 iCloud</Button>
-            <Button size="sm" variant="secondary" onClick={() => setEditOpen(true)}>Bearbeiten</Button>
-            <Button size="sm" variant="danger" onClick={handleDelete}>Löschen</Button>
+
+          {/* Kebab-Menü */}
+          <div className="relative shrink-0" ref={menuRef}>
+            <button
+              onClick={() => setMenuOpen((v) => !v)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-colors"
+              title="Aktionen"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <circle cx="12" cy="5" r="1.5"/>
+                <circle cx="12" cy="12" r="1.5"/>
+                <circle cx="12" cy="19" r="1.5"/>
+              </svg>
+            </button>
+            {menuOpen && (
+              <div className="absolute right-0 top-full mt-1 w-44 bg-white border border-gray-200 rounded-xl shadow-lg z-20 py-1 overflow-hidden">
+                <button
+                  onClick={() => { setIcloudOpen(true); setMenuOpen(false) }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  📅 iCloud
+                </button>
+                <button
+                  onClick={() => { setEditOpen(true); setMenuOpen(false) }}
+                  className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+                >
+                  ✎ Bearbeiten
+                </button>
+                <div className="border-t border-gray-100 my-1" />
+                <button
+                  onClick={() => { setMenuOpen(false); handleDelete() }}
+                  className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                >
+                  🗑 Löschen
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Status-Fehler */}
         {statusError && (
-          <div className="mb-3 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
             {statusError}
           </div>
         )}
 
-        {/* Status + Priorität */}
-        <div className="flex flex-wrap gap-2 mb-5 items-center">
-          {/* Status-Dropdown */}
+        {/* ── Status + Priorität + Tags ── */}
+        <div className="flex flex-wrap gap-2 items-center mb-1">
           <div className="relative">
             <select
               value={issue.status}
               onChange={(e) => handleStatusChange(e.target.value)}
-              className={`appearance-none text-xs font-medium px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-primary-400 ${STATUS_COLORS[issue.status]}`}
+              className={`appearance-none text-xs font-semibold px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-primary-400 ${STATUS_COLORS[issue.status]}`}
             >
               {STATUSES.map((s) => (
                 <option key={s} value={s}>{STATUS_LABELS[s]}</option>
               ))}
             </select>
-            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-60">▾</span>
+            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-50">▾</span>
           </div>
           <div className="relative">
             <select
               value={issue.priority}
               onChange={(e) => handlePriorityChange(e.target.value)}
-              className={`appearance-none text-xs font-medium px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-primary-400 ${PRIORITY_COLORS[issue.priority]}`}
+              className={`appearance-none text-xs font-semibold px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-primary-400 ${PRIORITY_COLORS[issue.priority]}`}
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>{PRIORITY_ICONS[p]} {PRIORITY_LABELS[p]}</option>
               ))}
             </select>
-            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-60">▾</span>
+            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-50">▾</span>
           </div>
           {issue.tags?.map((tag) => (
             <span
               key={tag.id}
-              className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
-              style={{ backgroundColor: tag.color + '33', color: tag.color }}
+              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold"
+              style={{ backgroundColor: tag.color + '22', color: tag.color }}
             >
               {tag.name}
             </span>
           ))}
         </div>
 
-        {/* Felder */}
-        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-4 bg-gray-50 rounded-xl p-4 mb-5 text-sm">
-          {field('Typ', issue.type)}
-          {field('Erstellt von', issue.creator_name)}
-          {field('Zugewiesen an', issue.assignee_name)}
-          {field('Fällig am', formatDate(issue.due_date))}
-          {field('Startdatum', formatDate(issue.start_date))}
-          {field('Schätzung', issue.estimated_hours ? `${issue.estimated_hours} h` : null)}
-          {field('Erstellt', formatDateTime(issue.created_at))}
-          {field('Geändert', formatDateTime(issue.updated_at))}
-          {issue.milestone_name && field('Meilenstein', issue.milestone_name)}
-        </dl>
+        {/* ── Sektionen mit Trennlinien ── */}
+        <div className="divide-y divide-gray-200">
 
-        {/* Beschreibung */}
-        {issue.description && (
-          <div className="mb-5">
-            <h2 className="text-sm font-semibold text-gray-700 mb-2">Beschreibung</h2>
-            <div className="prose prose-sm max-w-none bg-gray-50 rounded-lg p-4 text-gray-800">
-              <ReactMarkdown>{issue.description}</ReactMarkdown>
+          {/* Metadaten */}
+          <div className="py-3">
+            <div className="bg-slate-50 rounded-xl px-4 py-3 flex flex-wrap gap-x-5 gap-y-2">
+              <MetaItem label="Erstellt von" value={issue.creator_name} />
+              <MetaItem label="Zugewiesen" value={issue.assignee_name} />
+              <MetaItem label="Fällig" value={formatDate(issue.due_date)} />
+              <MetaItem label="Start" value={formatDate(issue.start_date)} />
+              <MetaItem label="Schätzung" value={issue.estimated_hours ? `${issue.estimated_hours} h` : null} />
+              <MetaItem label="Meilenstein" value={issue.milestone_name} />
+              <MetaItem label="Erstellt" value={formatDateTime(issue.created_at)} />
+              <MetaItem label="Geändert" value={formatDateTime(issue.updated_at)} />
             </div>
           </div>
-        )}
 
-        {/* Übergeordnete Story (nur bei Unteraufgaben) */}
-        {issue.type === 'subtask' && parentIssue && (
-          <div className="mb-5 bg-blue-50 rounded-lg px-4 py-3 flex items-center gap-2 text-sm">
-            <span className="text-gray-500 shrink-0">Story:</span>
-            <Link
-              to={`/projects/${projectId}/issues/${parentIssue.id}`}
-              className="font-medium text-primary-600 hover:text-primary-800 truncate"
-            >
-              #{parentIssue.id} {parentIssue.title}
-            </Link>
-          </div>
-        )}
-
-        {/* Abhängigkeiten */}
-        <DependenciesSection issueId={issue.id} projectId={projectId} />
-
-        {/* Unteraufgaben (nur bei Stories) */}
-        {issue.type === 'story' && subtasks.length > 0 && (
-          <SubtasksBlock subtasks={subtasks} projectId={projectId} />
-        )}
-
-        {/* Tabs: Aktivität / Kommentare / Zeiterfassung / Anhänge */}
-        <div className="border-b border-gray-200 mb-4">
-          <div className="flex gap-1">
-            {[
-              { key: 'activity',    label: `Aktivität (${activity.length})` },
-              { key: 'comments',    label: `Kommentare (${comments.length})` },
-              { key: 'worklog',     label: `Zeiterfassung (${worklogs.length})` },
-              { key: 'attachments', label: `Anhänge (${attachments.length})` },
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
-                  tab === key
-                    ? 'border-primary-500 text-primary-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {tab === 'activity' && (
-          <ul className="space-y-2">
-            {activity.length === 0 && <li className="text-sm text-gray-400">Keine Aktivität</li>}
-            {activity.map((log) => {
-              const canRevert = user?.is_admin
-                && log.field_changed
-                && log.old_value !== null && log.old_value !== undefined
-                && ['updated', 'status_changed', 'field_changed', 'ki_update', 'reverted'].includes(log.action)
-              return (
-                <li key={log.id} className="flex gap-3 text-sm items-start">
-                  <span className="text-gray-400 text-xs shrink-0 mt-0.5">{formatDateTime(log.timestamp)}</span>
-                  <span className="text-gray-600 flex-1">
-                    <span className="font-medium text-gray-800">{log.user_name || 'System'}</span>{' '}
-                    {log.action === 'status_changed'
-                      ? `hat Status geändert: ${log.old_value} → ${log.new_value}`
-                      : log.action === 'commented'
-                      ? 'hat kommentiert'
-                      : log.action === 'reverted'
-                      ? `hat ${log.field_changed} zurückgesetzt auf „${log.new_value}"`
-                      : log.action === 'ki_update'
-                      ? `🤖 hat ${log.field_changed} geändert: ${log.old_value} → ${log.new_value}`
-                      : log.action === 'ki_comment'
-                      ? '🤖 hat einen KI-Kommentar hinzugefügt'
-                      : log.action === 'ki_create'
-                      ? '🤖 hat dieses Issue erstellt'
-                      : log.field_changed
-                      ? `hat ${log.field_changed} geändert`
-                      : log.action}
-                  </span>
-                  {canRevert && (
-                    <button
-                      onClick={async () => {
-                        if (!window.confirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
-                        try {
-                          const { data: updated } = await issuesApi.revertActivity(issue.id, log.id)
-                          upsertIssue(updated)
-                          const { data } = await issuesApi.getActivity(issue.id)
-                          setActivity(data)
-                        } catch (err) {
-                          alert(err.response?.data?.error || 'Fehler beim Rückgängigmachen')
-                        }
-                      }}
-                      title="Rückgängig machen"
-                      className="text-gray-300 hover:text-orange-500 transition-colors px-1 shrink-0"
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 7h10a5 5 0 0 1 0 10H3"/><polyline points="7 3 3 7 7 11"/>
-                      </svg>
-                    </button>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
-        )}
-
-        {tab === 'comments' && (
-          <div className="space-y-3">
-            {comments.map((c) => (
-              <div key={c.id} className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs font-medium text-gray-700">{c.author_name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-gray-400">{formatDateTime(c.created_at)}</span>
-                    {(c.author_id === user?.id) && (
-                      <button
-                        onClick={() => handleDeleteComment(c.id)}
-                        className="text-xs text-gray-400 hover:text-red-600"
-                      >
-                        Löschen
-                      </button>
-                    )}
-                  </div>
-                </div>
-                <div className="prose prose-sm max-w-none text-gray-800">
-                  <ReactMarkdown>{c.content}</ReactMarkdown>
-                </div>
+          {/* Beschreibung */}
+          {issue.description && (
+            <div className="py-5">
+              <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Beschreibung</h2>
+              <div className="prose prose-sm max-w-none text-gray-800">
+                <ReactMarkdown>{issue.description}</ReactMarkdown>
               </div>
-            ))}
-            <form onSubmit={handleAddComment} className="flex gap-2 mt-3">
-              <input
-                value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                placeholder="Kommentar hinzufügen…"
-                className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-              />
-              <Button type="submit" size="sm">Senden</Button>
-            </form>
+            </div>
+          )}
+
+          {/* Übergeordnete Story */}
+          {issue.type === 'subtask' && parentIssue && (
+            <div className="py-4">
+              <div className="flex items-center gap-2 text-sm pl-3 py-1.5 border-l-2 border-primary-300 bg-primary-50/50 rounded-r-lg">
+                <span className="text-gray-400">Story</span>
+                <Link
+                  to={`/projects/${projectId}/issues/${parentIssue.id}`}
+                  className="font-medium text-primary-600 hover:text-primary-800 truncate"
+                >
+                  #{parentIssue.id} {parentIssue.title}
+                </Link>
+              </div>
+            </div>
+          )}
+
+          {/* Abhängigkeiten */}
+          <div className="py-4">
+            <DependenciesSection issueId={issue.id} projectId={projectId} />
           </div>
-        )}
 
-      {tab === 'worklog' && (
-          <div className="space-y-4">
-            {/* Timer */}
-            <WorklogTimer onStop={handleWorklogSave} />
+          {/* Unteraufgaben */}
+          {issue.type === 'story' && subtasks.length > 0 && (
+            <div className="py-4">
+              <SubtasksBlock subtasks={subtasks} projectId={projectId} />
+            </div>
+          )}
 
-            {/* Manuelle Eingabe */}
-            {showManualEntry ? (
-              <WorklogEntry
-                issueId={issue.id}
-                onSaved={handleWorklogSave}
-                onCancel={() => setShowManualEntry(false)}
-              />
-            ) : (
-              <button
-                onClick={() => setShowManualEntry(true)}
-                className="text-sm text-primary-600 hover:text-primary-700 font-medium"
-              >
-                + Manuell eintragen
-              </button>
+          {/* ── Tabs ── */}
+          <div className="pt-6">
+            <div className="flex gap-1 p-1 bg-gray-100 rounded-full w-fit mb-5">
+              {tabs.map(({ key, label, count }) => (
+                <button
+                  key={key}
+                  onClick={() => setTab(key)}
+                  className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
+                    tab === key
+                      ? 'bg-white text-gray-900 shadow-sm'
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  {label}
+                  {count > 0 && (
+                    <span className={`ml-1.5 text-xs ${tab === key ? 'text-gray-500' : 'text-gray-400'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Aktivität */}
+            {tab === 'activity' && (
+              <ul className="space-y-1">
+                {activity.length === 0 && (
+                  <li className="text-sm text-gray-400 py-2">Keine Aktivität</li>
+                )}
+                {activity.map((log) => {
+                  const canRevert = user?.is_admin
+                    && log.field_changed
+                    && log.old_value !== null && log.old_value !== undefined
+                    && ['updated', 'status_changed', 'field_changed', 'ki_update', 'reverted'].includes(log.action)
+                  return (
+                    <li key={log.id} className="flex gap-3 text-sm items-start py-1.5">
+                      <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${ACTION_DOT[log.action] || 'bg-gray-300'}`} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-gray-600">
+                          <span className="font-medium text-gray-800">{log.user_name || 'System'}</span>{' '}
+                          {log.action === 'status_changed'
+                            ? `hat Status geändert: ${log.old_value} → ${log.new_value}`
+                            : log.action === 'commented'
+                            ? 'hat kommentiert'
+                            : log.action === 'reverted'
+                            ? `hat ${log.field_changed} zurückgesetzt auf „${log.new_value}"`
+                            : log.action === 'ki_update'
+                            ? `🤖 hat ${log.field_changed} geändert: ${log.old_value} → ${log.new_value}`
+                            : log.action === 'ki_comment'
+                            ? '🤖 hat einen KI-Kommentar hinzugefügt'
+                            : log.action === 'ki_create'
+                            ? '🤖 hat dieses Issue erstellt'
+                            : log.field_changed
+                            ? `hat ${log.field_changed} geändert`
+                            : log.action}
+                        </span>
+                        <span className="text-xs text-gray-400 block mt-0.5">{formatDateTime(log.timestamp)}</span>
+                      </div>
+                      {canRevert && (
+                        <button
+                          onClick={async () => {
+                            if (!window.confirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
+                            try {
+                              const { data: updated } = await issuesApi.revertActivity(issue.id, log.id)
+                              upsertIssue(updated)
+                              const { data } = await issuesApi.getActivity(issue.id)
+                              setActivity(data)
+                            } catch (err) {
+                              alert(err.response?.data?.error || 'Fehler beim Rückgängigmachen')
+                            }
+                          }}
+                          title="Rückgängig machen"
+                          className="text-gray-300 hover:text-orange-500 transition-colors px-1 shrink-0 mt-0.5"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 7h10a5 5 0 0 1 0 10H3"/><polyline points="7 3 3 7 7 11"/>
+                          </svg>
+                        </button>
+                      )}
+                    </li>
+                  )
+                })}
+              </ul>
             )}
 
-            {/* Liste */}
-            <WorklogList worklogs={worklogs} onDelete={handleWorklogDelete} />
-          </div>
-        )}
-
-      {tab === 'attachments' && (
-        <div className="space-y-3">
-          <div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
-            >
-              + Datei hochladen
-            </button>
-          </div>
-          {attachments.length === 0 && (
-            <p className="text-sm text-gray-400">Keine Anhänge</p>
-          )}
-          {attachments.map((att) => {
-            const isImage = att.mime_type?.startsWith('image/')
-            const isPdf   = att.mime_type === 'application/pdf'
-            const preview = attachmentsApi.previewUrl(att.id)
-            return (
-              <div key={att.id} className="bg-gray-50 rounded-lg p-3">
-                <div className="flex items-center gap-3">
-                  {/* Icon / Thumbnail */}
-                  {isImage ? (
-                    <img
-                      src={preview}
-                      alt={att.original_name}
-                      className="w-10 h-10 object-cover rounded shrink-0 cursor-pointer border border-gray-200"
-                      onClick={() => window.open(preview, '_blank')}
-                    />
-                  ) : isPdf ? (
-                    <div className="w-10 h-10 bg-red-50 border border-red-200 rounded flex items-center justify-center text-red-500 text-xs font-bold shrink-0">
-                      PDF
-                    </div>
-                  ) : (
-                    <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center text-gray-400 text-lg shrink-0">
-                      📄
-                    </div>
-                  )}
-
-                  {/* Name + Metadaten */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm text-gray-800 font-medium truncate">{att.original_name}</p>
-                    <p className="text-xs text-gray-400">{formatFileSize(att.size)} · {att.uploader_name}</p>
-                  </div>
-
-                  {/* Aktionen */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    {isPdf && (
-                      <button
-                        onClick={() => setShowPreview((p) => ({ ...p, [att.id]: !p[att.id] }))}
-                        className="text-xs text-primary-600 hover:text-primary-800"
-                      >
-                        {showPreview[att.id] ? 'Einklappen' : 'Vorschau'}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => attachmentsApi.download(att.id)}
-                      className="text-xs text-primary-600 hover:text-primary-800"
-                    >
-                      ↓ Laden
-                    </button>
-                    {(att.uploader_id === user?.id || user?.is_admin) && (
-                      <button
-                        onClick={() => handleDeleteAttachment(att.id)}
-                        className="text-xs text-gray-400 hover:text-red-600"
-                      >
-                        Löschen
-                      </button>
-                    )}
-                  </div>
-                </div>
-
-                {/* PDF-Vorschau */}
-                {isPdf && showPreview[att.id] && (
-                  <iframe
-                    src={preview}
-                    title={att.original_name}
-                    className="w-full h-48 mt-2 rounded border border-gray-200"
-                  />
+            {/* Kommentare */}
+            {tab === 'comments' && (
+              <div className="space-y-5">
+                {comments.length === 0 && (
+                  <p className="text-sm text-gray-400 py-2">Noch keine Kommentare</p>
                 )}
+                {comments.map((c) => (
+                  <div key={c.id} className="flex gap-3">
+                    <div className="w-7 h-7 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center text-xs font-bold shrink-0">
+                      {(c.author_name || 'U')[0].toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2 mb-1.5">
+                        <span className="text-sm font-semibold text-gray-900">{c.author_name}</span>
+                        <span className="text-xs text-gray-400">{formatDateTime(c.created_at)}</span>
+                        {(c.author_id === user?.id) && (
+                          <button
+                            onClick={() => handleDeleteComment(c.id)}
+                            className="text-xs text-gray-300 hover:text-red-500 ml-auto transition-colors"
+                          >
+                            Löschen
+                          </button>
+                        )}
+                      </div>
+                      <div className="prose prose-sm max-w-none text-gray-700">
+                        <ReactMarkdown>{c.content}</ReactMarkdown>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <form onSubmit={handleAddComment} className="flex gap-2 pt-2">
+                  <div className="w-7 h-7 rounded-full bg-gray-100 text-gray-400 flex items-center justify-center text-xs font-bold shrink-0">
+                    {(user?.username || 'U')[0].toUpperCase()}
+                  </div>
+                  <input
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Kommentar hinzufügen…"
+                    className="flex-1 border border-gray-200 rounded-full px-4 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-transparent"
+                  />
+                  <Button type="submit" size="sm">Senden</Button>
+                </form>
               </div>
-            )
-          })}
+            )}
+
+            {/* Zeiterfassung */}
+            {tab === 'worklog' && (
+              <div className="space-y-4">
+                <WorklogTimer onStop={handleWorklogSave} />
+                {showManualEntry ? (
+                  <WorklogEntry
+                    issueId={issue.id}
+                    onSaved={handleWorklogSave}
+                    onCancel={() => setShowManualEntry(false)}
+                  />
+                ) : (
+                  <button
+                    onClick={() => setShowManualEntry(true)}
+                    className="text-sm text-primary-600 hover:text-primary-700 font-medium"
+                  >
+                    + Manuell eintragen
+                  </button>
+                )}
+                <WorklogList worklogs={worklogs} onDelete={handleWorklogDelete} />
+              </div>
+            )}
+
+            {/* Anhänge */}
+            {tab === 'attachments' && (
+              <div className="space-y-3">
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileUpload}
+                  />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    + Datei hochladen
+                  </button>
+                </div>
+                {attachments.length === 0 && (
+                  <p className="text-sm text-gray-400">Keine Anhänge</p>
+                )}
+                {attachments.map((att) => {
+                  const isImage = att.mime_type?.startsWith('image/')
+                  const isPdf   = att.mime_type === 'application/pdf'
+                  const preview = attachmentsApi.previewUrl(att.id)
+                  return (
+                    <div key={att.id} className="border border-gray-100 rounded-xl p-3 hover:border-gray-200 transition-colors">
+                      <div className="flex items-center gap-3">
+                        {isImage ? (
+                          <img
+                            src={preview}
+                            alt={att.original_name}
+                            className="w-10 h-10 object-cover rounded-lg shrink-0 cursor-pointer border border-gray-100"
+                            onClick={() => window.open(preview, '_blank')}
+                          />
+                        ) : isPdf ? (
+                          <div className="w-10 h-10 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center text-red-400 text-xs font-bold shrink-0">
+                            PDF
+                          </div>
+                        ) : (
+                          <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center text-gray-300 text-lg shrink-0">
+                            📄
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-gray-800 font-medium truncate">{att.original_name}</p>
+                          <p className="text-xs text-gray-400">{formatFileSize(att.size)} · {att.uploader_name}</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          {isPdf && (
+                            <button
+                              onClick={() => setShowPreview((p) => ({ ...p, [att.id]: !p[att.id] }))}
+                              className="text-xs text-primary-600 hover:text-primary-800"
+                            >
+                              {showPreview[att.id] ? 'Einklappen' : 'Vorschau'}
+                            </button>
+                          )}
+                          <button
+                            onClick={() => attachmentsApi.download(att.id)}
+                            className="text-xs text-primary-600 hover:text-primary-800"
+                          >
+                            ↓ Laden
+                          </button>
+                          {(att.uploader_id === user?.id || user?.is_admin) && (
+                            <button
+                              onClick={() => handleDeleteAttachment(att.id)}
+                              className="text-xs text-gray-300 hover:text-red-500 transition-colors"
+                            >
+                              Löschen
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      {isPdf && showPreview[att.id] && (
+                        <iframe
+                          src={preview}
+                          title={att.original_name}
+                          className="w-full h-48 mt-3 rounded-lg border border-gray-100"
+                        />
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      )}
       </div>
 
       {/* iCloud Modal */}
