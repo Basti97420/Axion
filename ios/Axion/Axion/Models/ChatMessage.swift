@@ -24,11 +24,13 @@ struct APIChatMessage: Codable {
 }
 
 struct AIChatRequest: Codable {
-    let messages: [APIChatMessage]
+    let message: String           // aktueller Nutzereingabe-Text (Singular)
+    let history: [APIChatMessage] // vorherige Nachrichten (max 10)
+    let context: [String: String] // leer {}
     let projectId: Int?
 
     enum CodingKeys: String, CodingKey {
-        case messages
+        case message, history, context
         case projectId = "project_id"
     }
 }

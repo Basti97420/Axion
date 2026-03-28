@@ -10,6 +10,8 @@ struct IssueDetailView: View {
     @State private var commentText: String = ""
     @State private var isSendingComment: Bool = false
     @State private var showStatusSheet: Bool = false
+    @State private var showPrioritySheet: Bool = false
+    @State private var showEditSheet: Bool = false
 
     var body: some View {
         Group {
@@ -29,11 +31,36 @@ struct IssueDetailView: View {
             }
         }
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                if let issue = issue {
+                    Button {
+                        showEditSheet = true
+                    } label: {
+                        Image(systemName: "pencil")
+                    }
+                }
+            }
+        }
         .onAppear { load() }
         .sheet(isPresented: $showStatusSheet) {
             if let issue = issue {
                 StatusPickerSheet(issue: issue) { newStatus in
                     changeStatus(to: newStatus)
+                }
+            }
+        }
+        .sheet(isPresented: $showPrioritySheet) {
+            if let issue = issue {
+                PriorityPickerSheet(issue: issue) { newPriority in
+                    changePriority(to: newPriority)
+                }
+            }
+        }
+        .sheet(isPresented: $showEditSheet) {
+            if let issue = issue {
+                IssueEditView(issue: issue) { updated in
+                    self.issue = updated
                 }
             }
         }
@@ -82,18 +109,21 @@ struct IssueDetailView: View {
                         }
                         .buttonStyle(.plain)
 
-                        HStack(spacing: 5) {
-                            Image(systemName: issue.priority.icon)
-                                .font(.caption2)
-                            Text(issue.priority.label)
-                                .font(.caption)
-                                .fontWeight(.medium)
+                        Button { showPrioritySheet = true } label: {
+                            HStack(spacing: 5) {
+                                Image(systemName: issue.priority.icon)
+                                    .font(.caption2)
+                                Text(issue.priority.label)
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                            }
+                            .foregroundColor(issue.priority.color)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 5)
+                            .background(issue.priority.color.opacity(0.12))
+                            .cornerRadius(20)
                         }
-                        .foregroundColor(issue.priority.color)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 5)
-                        .background(issue.priority.color.opacity(0.12))
-                        .cornerRadius(20)
+                        .buttonStyle(.plain)
                     }
                 }
                 .padding(16)
@@ -228,6 +258,16 @@ struct IssueDetailView: View {
                     isLoading = false
                 }
             }
+        }
+    }
+
+    private func changePriority(to priority: IssuePriority) {
+        guard let current = issue else { return }
+        Task {
+            do {
+                let updated = try await IssueService.patchPriority(issueId: current.id, priority: priority)
+                await MainActor.run { issue = updated }
+            } catch {}
         }
     }
 

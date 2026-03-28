@@ -5,8 +5,8 @@ struct AIService {
         return try await APIClient.shared.get("/ai/status")
     }
 
-    static func chat(messages: [APIChatMessage], projectId: Int? = nil) async throws -> AIChatResponse {
-        let request = AIChatRequest(messages: messages, projectId: projectId)
+    static func chat(message: String, history: [APIChatMessage], projectId: Int? = nil) async throws -> AIChatResponse {
+        let request = AIChatRequest(message: message, history: history, context: [:], projectId: projectId)
         return try await APIClient.shared.post("/ai/chat", body: request)
     }
 }

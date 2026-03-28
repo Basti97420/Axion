@@ -64,20 +64,55 @@ struct WikiListView: View {
 
     private func wikiRow(_ page: WikiPage, depth: Int) -> some View {
         NavigationLink(destination: WikiPageView(slug: page.slug, title: page.title)) {
-            HStack(spacing: 8) {
-                if depth > 0 {
-                    Color.clear.frame(width: CGFloat(depth) * 16)
-                    Image(systemName: "arrow.turn.down.right")
+            HStack(spacing: 0) {
+                // Einrückung + Icon + Titel
+                HStack(spacing: 6) {
+                    if depth > 0 {
+                        Color.clear.frame(width: CGFloat(depth) * 14)
+                        Image(systemName: "arrow.turn.down.right")
+                            .font(.caption2)
+                            .foregroundColor(Color(.tertiaryLabel))
+                    }
+                    Image(systemName: depth == 0 ? "doc.text.fill" : "doc.text")
+                        .font(.caption)
+                        .foregroundColor(depth == 0 ? .indigo : Color(.secondaryLabel))
+                    Text(page.title)
+                        .font(.subheadline)
+                        .fontWeight(depth == 0 ? .medium : .regular)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                // Datum (rechte Spalte, feste Breite)
+                if let updated = page.updatedAt {
+                    Text(formatShortDate(updated))
                         .font(.caption2)
                         .foregroundColor(.secondary)
+                        .frame(width: 72, alignment: .trailing)
                 }
-                Image(systemName: "doc.text")
-                    .font(.caption)
-                    .foregroundColor(.indigo)
-                Text(page.title)
-                    .font(.subheadline)
             }
+            .padding(.vertical, 2)
         }
+    }
+
+    private func formatShortDate(_ iso: String) -> String {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = f.date(from: iso) {
+            let out = DateFormatter()
+            out.dateStyle = .short
+            out.locale = Locale(identifier: "de_DE")
+            return out.string(from: date)
+        }
+        // fallback: nur Datum-Teil
+        let f2 = ISO8601DateFormatter()
+        f2.formatOptions = [.withFullDate]
+        if let date = f2.date(from: String(iso.prefix(10))) {
+            let out = DateFormatter()
+            out.dateStyle = .short
+            out.locale = Locale(identifier: "de_DE")
+            return out.string(from: date)
+        }
+        return String(iso.prefix(10))
     }
 
     private func load() {

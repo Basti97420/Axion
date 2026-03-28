@@ -59,6 +59,16 @@ class APIClient {
         return try await perform(request)
     }
 
+    // MARK: - PUT
+    func put<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
+        let url = try url(path)
+        var request = URLRequest(url: url)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(body)
+        return try await perform(request)
+    }
+
     // MARK: - PATCH
     func patch<B: Encodable, T: Decodable>(_ path: String, body: B) async throws -> T {
         let url = try url(path)

@@ -119,21 +119,22 @@ struct AIChatView: View {
         inputText = ""
         isLoading = true
 
+        // History = alle bisherigen Nachrichten (ohne Loading-Einträge), max. 10
+        let history = messages
+            .filter { !$0.isLoading }
+            .suffix(10)
+            .map { APIChatMessage(role: $0.role.rawValue, content: $0.content) }
+
         let userMsg = ChatMessage(role: .user, content: text)
         messages.append(userMsg)
         let loadingMsg = ChatMessage(role: .assistant, content: "", isLoading: true)
         messages.append(loadingMsg)
 
-        // Build API messages
-        let apiMessages = messages.dropLast().map { m in
-            APIChatMessage(role: m.role.rawValue, content: m.content)
-        }
-
         Task {
             do {
-                let response = try await AIService.chat(messages: Array(apiMessages), projectId: projectId)
+                let response = try await AIService.chat(message: text, history: Array(history), projectId: projectId)
                 await MainActor.run {
-                    messages.removeLast() // remove loading
+                    messages.removeLast() // loading entfernen
                     messages.append(ChatMessage(role: .assistant, content: response.reply))
                     isLoading = false
                 }

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var appState: AppState
+    @ObservedObject private var notifications = NotificationService.shared
     @State private var urlInput: String = ""
     @State private var showLogoutConfirm: Bool = false
     @State private var showSaved: Bool = false
@@ -50,6 +51,36 @@ struct SettingsView: View {
                     Label("Gespeichert", systemImage: "checkmark.circle.fill")
                         .foregroundColor(.green)
                         .font(.caption)
+                }
+            }
+
+            Section(header: Text("Benachrichtigungen")) {
+                Toggle(isOn: Binding(
+                    get: { notifications.isEnabled },
+                    set: { newVal in
+                        if newVal {
+                            Task {
+                                let granted = await notifications.requestPermission()
+                                await MainActor.run { notifications.isEnabled = granted }
+                            }
+                        } else {
+                            notifications.isEnabled = false
+                        }
+                    }
+                )) {
+                    Label("Benachrichtigungen aktivieren", systemImage: "bell")
+                }
+
+                if notifications.isEnabled {
+                    Toggle(isOn: $notifications.notifyNewIssues) {
+                        Label("Neue Issues", systemImage: "plus.circle")
+                    }
+                    Toggle(isOn: $notifications.notifyStatusChanges) {
+                        Label("Status-Änderungen", systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    Toggle(isOn: $notifications.notifyAgentCompleted) {
+                        Label("Agent abgeschlossen", systemImage: "cpu")
+                    }
                 }
             }
 

@@ -32,7 +32,7 @@ struct ProjectListView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(projects) { project in
-                    NavigationLink(destination: IssueListView(project: project)) {
+                    NavigationLink(destination: ProjectDetailView(project: project)) {
                         ProjectRowView(project: project)
                     }
                 }
