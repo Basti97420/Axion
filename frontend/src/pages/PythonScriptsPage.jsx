@@ -868,6 +868,7 @@ export default function PythonScriptsPage() {
   const [tab, setTab] = useState('editor') // 'editor' | 'runs' | 'files'
   const [cellOutputs, setCellOutputs] = useState({})   // { cellIndex: run }
   const [cellRunning, setCellRunning] = useState(null)  // cellIndex | null
+  const [sidebarFiles, setSidebarFiles] = useState([])
 
   useEffect(() => {
     pythonScriptsApi.getAll(projectId).then(({ data }) => setScripts(data)).catch(() => {})
@@ -962,6 +963,7 @@ export default function PythonScriptsPage() {
     setCreating(false)
     setError(null)
     setTab('editor')
+    pythonScriptsApi.getFiles(sc.id).then(({ data }) => setSidebarFiles(data)).catch(() => setSidebarFiles([]))
   }
 
   function startCreate() {
@@ -984,33 +986,58 @@ export default function PythonScriptsPage() {
           {scripts.length === 0 && (
             <p className="text-xs text-gray-400 p-4 text-center">Noch keine Scripts.</p>
           )}
-          {scripts.map((sc) => (
-            <button
-              key={sc.id}
-              onClick={() => selectScript(sc)}
-              className={`w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${selected?.id === sc.id && !creating ? 'bg-primary-50' : ''}`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${sc.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
-                <span className="text-xs text-gray-400 font-mono shrink-0">#{sc.id}</span>
-                <span className="text-sm font-medium text-gray-800 truncate">{sc.name}</span>
-                {sc.schedule_type === 'interval' && (
-                  <span className="text-xs text-blue-500 shrink-0">
-                    ⏱ {sc.interval_min}min
-                    {sc.schedule_days && sc.schedule_days.length < 7 && (
-                      <> · {['Mo','Di','Mi','Do','Fr','Sa','So'].filter((_, i) => sc.schedule_days.includes(i)).join(' ')}</>
-                    )}
-                  </span>
+          {scripts.map((sc) => {
+            const isSelected = selected?.id === sc.id && !creating
+            return (
+              <div
+                key={sc.id}
+                onClick={() => selectScript(sc)}
+                className={`w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-primary-50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${sc.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
+                  <span className="text-xs text-gray-400 font-mono shrink-0">#{sc.id}</span>
+                  <span className="text-sm font-medium text-gray-800 truncate">{sc.name}</span>
+                  {sc.schedule_type === 'interval' && (
+                    <span className="text-xs text-blue-500 shrink-0">
+                      ⏱ {sc.interval_min}min
+                      {sc.schedule_days && sc.schedule_days.length < 7 && (
+                        <> · {['Mo','Di','Mi','Do','Fr','Sa','So'].filter((_, i) => sc.schedule_days.includes(i)).join(' ')}</>
+                      )}
+                    </span>
+                  )}
+                  {sc.cells && (
+                    <span className="text-xs text-orange-400 shrink-0">🧪</span>
+                  )}
+                </div>
+                {sc.description && (
+                  <div className="text-xs text-gray-400 mt-0.5 pl-4 truncate">{sc.description}</div>
                 )}
-                {sc.cells && (
-                  <span className="text-xs text-orange-400 shrink-0">🧪</span>
+                {isSelected && (
+                  <div className="mt-2 pt-2 border-t border-gray-200 space-y-1.5">
+                    <div className="flex flex-wrap gap-1">
+                      {sidebarFiles.slice(0, 3).map((f) => (
+                        <span key={f.filename} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono truncate max-w-[100px]">
+                          {f.filename}
+                        </span>
+                      ))}
+                      {sidebarFiles.length > 3 && (
+                        <span className="text-xs text-gray-400">+{sidebarFiles.length - 3} weitere</span>
+                      )}
+                      {sidebarFiles.length === 0 && (
+                        <span className="text-xs text-gray-300">Keine Dateien</span>
+                      )}
+                    </div>
+                    {runs[0]?.stdout && (
+                      <p className="text-xs text-gray-400 line-clamp-2 italic">
+                        "{runs[0].stdout.slice(0, 120)}{runs[0].stdout.length > 120 ? '…' : ''}"
+                      </p>
+                    )}
+                  </div>
                 )}
               </div>
-              {sc.description && (
-                <div className="text-xs text-gray-400 mt-0.5 pl-4 truncate">{sc.description}</div>
-              )}
-            </button>
-          ))}
+            )
+          })}
         </div>
       </div>
 

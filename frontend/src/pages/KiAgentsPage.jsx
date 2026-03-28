@@ -572,6 +572,7 @@ export default function KiAgentsPage() {
   const [error, setError] = useState(null)
   const [filesKey, setFilesKey] = useState(0)
   const [activeTab, setActiveTab] = useState('config')
+  const [sidebarFiles, setSidebarFiles] = useState([])
 
   useEffect(() => {
     kiAgentsApi.getAll(projectId).then(({ data }) => setAgents(data)).catch(() => {})
@@ -623,6 +624,7 @@ export default function KiAgentsPage() {
           setAgents((a) => a.map((ag) => ag.id === data.id ? data : ag))
         }).catch(() => {})
         setFilesKey((k) => k + 1)
+        kiAgentsApi.getFiles(selected.id).then(({ data }) => setSidebarFiles(data)).catch(() => {})
         setRunning(false)
       }, 2000)
     } catch (e) {
@@ -636,6 +638,7 @@ export default function KiAgentsPage() {
     setCreating(false)
     setError(null)
     setActiveTab('config')
+    kiAgentsApi.getFiles(agent.id).then(({ data }) => setSidebarFiles(data)).catch(() => setSidebarFiles([]))
   }
 
   function startCreate() {
@@ -658,34 +661,59 @@ export default function KiAgentsPage() {
           {agents.length === 0 && (
             <p className="text-xs text-gray-400 p-4 text-center">Noch keine Agenten.</p>
           )}
-          {agents.map((agent) => (
-            <button
-              key={agent.id}
-              onClick={() => selectAgent(agent)}
-              className={`w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors ${selected?.id === agent.id && !creating ? 'bg-primary-50' : ''}`}
-            >
-              <div className="flex items-center gap-2">
-                <span className={`w-2 h-2 rounded-full shrink-0 ${agent.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
-                <span className="text-xs text-gray-400 font-mono shrink-0">#{agent.id}</span>
-                <span className="text-sm font-medium text-gray-800 truncate">{agent.name}</span>
-                {agent.dry_run && <span className="text-xs text-orange-500 shrink-0">sim</span>}
-                {agent.retry_on_error && <span className="text-xs text-blue-400 shrink-0">🔄</span>}
-              </div>
-              <div className="text-xs text-gray-400 mt-0.5 pl-4">
-                {agent.last_run_at ? `Letzter Run: ${formatDateTime(agent.last_run_at)}` : 'Noch nicht ausgeführt'}
-              </div>
-              <div className="text-xs text-gray-400 pl-4">
-                {agent.schedule_type === 'interval' ? (
-                  <>
-                    ⏱ alle {agent.interval_min} Min
-                    {agent.schedule_days && agent.schedule_days.length < 7 && (
-                      <> · {['Mo','Di','Mi','Do','Fr','Sa','So'].filter((_, i) => agent.schedule_days.includes(i)).join(' ')}</>
+          {agents.map((agent) => {
+            const isSelected = selected?.id === agent.id && !creating
+            return (
+              <div
+                key={agent.id}
+                onClick={() => selectAgent(agent)}
+                className={`w-full text-left px-3 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors cursor-pointer ${isSelected ? 'bg-primary-50' : ''}`}
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full shrink-0 ${agent.is_active ? 'bg-green-400' : 'bg-gray-300'}`} />
+                  <span className="text-xs text-gray-400 font-mono shrink-0">#{agent.id}</span>
+                  <span className="text-sm font-medium text-gray-800 truncate">{agent.name}</span>
+                  {agent.dry_run && <span className="text-xs text-orange-500 shrink-0">sim</span>}
+                  {agent.retry_on_error && <span className="text-xs text-blue-400 shrink-0">🔄</span>}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5 pl-4">
+                  {agent.last_run_at ? `Letzter Run: ${formatDateTime(agent.last_run_at)}` : 'Noch nicht ausgeführt'}
+                </div>
+                <div className="text-xs text-gray-400 pl-4">
+                  {agent.schedule_type === 'interval' ? (
+                    <>
+                      ⏱ alle {agent.interval_min} Min
+                      {agent.schedule_days && agent.schedule_days.length < 7 && (
+                        <> · {['Mo','Di','Mi','Do','Fr','Sa','So'].filter((_, i) => agent.schedule_days.includes(i)).join(' ')}</>
+                      )}
+                    </>
+                  ) : 'Manuell'}
+                </div>
+                {isSelected && (
+                  <div className="mt-2 pt-2 border-t border-gray-200 space-y-1.5">
+                    <div className="flex flex-wrap gap-1">
+                      {sidebarFiles.slice(0, 3).map((f) => (
+                        <span key={f.filename} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono truncate max-w-[100px]">
+                          {f.filename}
+                        </span>
+                      ))}
+                      {sidebarFiles.length > 3 && (
+                        <span className="text-xs text-gray-400">+{sidebarFiles.length - 3} weitere</span>
+                      )}
+                      {sidebarFiles.length === 0 && (
+                        <span className="text-xs text-gray-300">Keine Dateien</span>
+                      )}
+                    </div>
+                    {agent.workspace && (
+                      <p className="text-xs text-gray-400 line-clamp-2 italic">
+                        "{agent.workspace.slice(0, 120)}{agent.workspace.length > 120 ? '…' : ''}"
+                      </p>
                     )}
-                  </>
-                ) : 'Manuell'}
+                  </div>
+                )}
               </div>
-            </button>
-          ))}
+            )
+          })}
         </div>
       </div>
 
