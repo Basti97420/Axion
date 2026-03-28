@@ -6,13 +6,23 @@ struct WikiListView: View {
     @State private var error: String? = nil
     @State private var searchText: String = ""
 
-    private var rootPages: [WikiPage] {
-        pages.filter { $0.parentId == nil }
+    // Flache, geordnete Liste mit Einrückungstiefe – vermeidet rekursive @ViewBuilder
+    private var orderedPages: [(page: WikiPage, depth: Int)] {
+        var result: [(WikiPage, Int)] = []
+        func addChildren(parentId: Int?, depth: Int) {
+            let children = pages.filter { $0.parentId == parentId }
+            for child in children {
+                result.append((child, depth))
+                addChildren(parentId: child.id, depth: depth + 1)
+            }
+        }
+        addChildren(parentId: nil, depth: 0)
+        return result
     }
 
-    private var filtered: [WikiPage] {
-        if searchText.isEmpty { return pages }
-        return pages.filter { $0.title.localizedCaseInsensitiveContains(searchText) }
+    private var filtered: [(page: WikiPage, depth: Int)] {
+        if searchText.isEmpty { return orderedPages }
+        return orderedPages.filter { $0.page.title.localizedCaseInsensitiveContains(searchText) }
     }
 
     var body: some View {
@@ -40,17 +50,8 @@ struct WikiListView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                List {
-                    if !searchText.isEmpty {
-                        ForEach(filtered) { page in
-                            wikiRow(page, depth: 0)
-                        }
-                    } else {
-                        ForEach(rootPages) { page in
-                            wikiRow(page, depth: 0)
-                            childRows(of: page.id, depth: 1)
-                        }
-                    }
+                List(filtered, id: \.page.id) { item in
+                    wikiRow(item.page, depth: item.depth)
                 }
                 .listStyle(.insetGrouped)
                 .searchable(text: $searchText, prompt: "Wiki durchsuchen")
@@ -61,7 +62,6 @@ struct WikiListView: View {
         .onAppear { load() }
     }
 
-    @ViewBuilder
     private func wikiRow(_ page: WikiPage, depth: Int) -> some View {
         NavigationLink(destination: WikiPageView(slug: page.slug, title: page.title)) {
             HStack(spacing: 8) {
@@ -77,15 +77,6 @@ struct WikiListView: View {
                 Text(page.title)
                     .font(.subheadline)
             }
-        }
-    }
-
-    @ViewBuilder
-    private func childRows(of parentId: Int, depth: Int) -> some View {
-        let children = pages.filter { $0.parentId == parentId }
-        ForEach(children) { child in
-            wikiRow(child, depth: depth)
-            childRows(of: child.id, depth: depth + 1)
         }
     }
 
