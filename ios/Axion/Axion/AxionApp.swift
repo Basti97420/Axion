@@ -1,13 +1,17 @@
+//
+//  AxionApp.swift
+//  Axion
+//
+//  Created by Basti on 28.03.26.
+//
+
 import SwiftUI
 
 @main
 struct AxionApp: App {
-    @StateObject private var appState = AppState()
-
     var body: some Scene {
         WindowGroup {
             ContentView()
-                .environmentObject(appState)
         }
     }
 }
