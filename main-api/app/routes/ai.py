@@ -45,6 +45,9 @@ Du kannst folgende Aktionen ausführen:
 - create_tag: Einen neuen Tag im Projekt erstellen
 - update_milestone: Einen bestehenden Meilenstein aktualisieren (name, description, due_date)
 - list_wiki_pages: Alle Wiki-Seiten des Projekts auflisten (liefert Ergebnisse im nächsten Schritt)
+- read_issue: Ein einzelnes Issue vollständig lesen inkl. aller Kommentare (zum Verifizieren nach Änderungen)
+- read_script_output: Den letzten Output eines Python-Scripts lesen (stdout, stderr, exit_code)
+- read_agent_output: Den letzten Output eines KI-Agenten lesen (output, Fehler)
 
 Antworte IMMER als valides JSON-Objekt in genau diesem Format:
 {{"reply": "Deine Antwort an den Nutzer", "action": null}}
@@ -77,6 +80,9 @@ Wenn du eine Aktion ausführst:
 {{"reply": "...", "action": {{"type": "create_tag", "data": {{"name": "urgent", "color": "#ef4444"}}}}}}
 {{"reply": "...", "action": {{"type": "update_milestone", "data": {{"milestone_id": 2, "name": "v2.0", "description": "...", "due_date": "2026-06-01"}}}}}}
 {{"reply": "Ich liste Wiki-Seiten...", "action": {{"type": "list_wiki_pages"}}}}
+{{"reply": "Ich lese Issue #5 zur Überprüfung...", "action": {{"type": "read_issue", "data": {{"issue_id": 5}}}}}}
+{{"reply": "Ich prüfe den Script-Output...", "action": {{"type": "read_script_output", "data": {{"script_id": 3}}}}}}
+{{"reply": "Ich prüfe den Agenten-Output...", "action": {{"type": "read_agent_output", "data": {{"agent_id": 2}}}}}}
 
 Verfügbare Status-Werte: open, in_progress, in_review, done, cancelled
 Verfügbare Prioritäten: low, medium, high, critical
@@ -173,6 +179,81 @@ def _fetch_context_for_ai(action):
         lines = ['Wiki-Seiten:']
         for p in pages:
             lines.append(f'  Slug: {p.slug} | Titel: {p.title}')
+        return '\n'.join(lines)
+
+    if action_type == 'read_issue':
+        from app.models.comment import Comment
+        issue_id = data.get('issue_id')
+        if not issue_id:
+            return 'issue_id fehlt.'
+        issue = Issue.query.get(issue_id)
+        if not issue:
+            return f'Issue #{issue_id} nicht gefunden.'
+        lines = [
+            f'# Issue #{issue.id}: {issue.title}',
+            f'Status: {issue.status} | Priorität: {issue.priority} | Typ: {issue.type}',
+            f'Beschreibung: {issue.description or "(keine)"}',
+            f'Fällig: {issue.due_date.isoformat() if issue.due_date else "(kein Datum)"}',
+        ]
+        comments = Comment.query.filter_by(issue_id=issue_id).order_by(Comment.created_at.asc()).all()
+        if comments:
+            lines.append(f'\nKommentare ({len(comments)}):')
+            for c in comments:
+                lines.append(f'  [{c.created_at.strftime("%d.%m.%Y %H:%M")}] {c.content}')
+        else:
+            lines.append('\nKeine Kommentare.')
+        return '\n'.join(lines)
+
+    if action_type == 'read_script_output':
+        from app.models.python_script import PythonScript, PythonScriptRun
+        script_id = data.get('script_id')
+        script_name = data.get('name')
+        if script_id:
+            script = PythonScript.query.get(script_id)
+        elif script_name:
+            script = PythonScript.query.filter_by(name=script_name).first()
+        else:
+            return 'script_id oder name fehlt.'
+        if not script:
+            return 'Script nicht gefunden.'
+        runs = PythonScriptRun.query.filter_by(script_id=script.id).order_by(PythonScriptRun.id.desc()).limit(3).all()
+        if not runs:
+            return f'Script "{script.name}" wurde noch nie ausgeführt.'
+        lines = [f'Letzte Ausführungen von "{script.name}":']
+        for r in runs:
+            status = f'exit {r.exit_code}' if r.exit_code is not None else ('Fehler' if r.error else 'läuft noch')
+            lines.append(f'\n--- Run {r.id} ({status}, {r.triggered_by}) ---')
+            if r.error:
+                lines.append(f'Fehler: {r.error}')
+            if r.stdout:
+                lines.append(f'stdout:\n{r.stdout[:2000]}{"..." if len(r.stdout) > 2000 else ""}')
+            if r.stderr:
+                lines.append(f'stderr:\n{r.stderr[:500]}{"..." if len(r.stderr) > 500 else ""}')
+        return '\n'.join(lines)
+
+    if action_type == 'read_agent_output':
+        from app.models.ki_agent import KiAgent, KiAgentRun
+        agent_id = data.get('agent_id')
+        agent_name = data.get('name')
+        if agent_id:
+            agent = KiAgent.query.get(agent_id)
+        elif agent_name:
+            agent = KiAgent.query.filter_by(name=agent_name).first()
+        else:
+            return 'agent_id oder name fehlt.'
+        if not agent:
+            return 'Agent nicht gefunden.'
+        runs = KiAgentRun.query.filter_by(agent_id=agent.id).order_by(KiAgentRun.id.desc()).limit(2).all()
+        if not runs:
+            return f'Agent "{agent.name}" wurde noch nie ausgeführt.'
+        lines = [f'Letzte Ausführungen von Agent "{agent.name}":']
+        for r in runs:
+            status = 'Fehler' if r.error else 'OK'
+            lines.append(f'\n--- Run {r.id} ({status}, {r.triggered_by}) ---')
+            if r.error:
+                lines.append(f'Fehler: {r.error}')
+            if r.output:
+                lines.append(f'Output:\n{r.output[:2000]}{"..." if len(r.output) > 2000 else ""}')
         return '\n'.join(lines)
 
     return None
@@ -778,7 +859,10 @@ def chat():
     action_result = None
 
     # Zweistufiger Ablauf für Lese-/Suchaktionen
-    READ_ACTIONS = ('read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages')
+    READ_ACTIONS = (
+        'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
+        'read_issue', 'read_script_output', 'read_agent_output',
+    )
     if action and isinstance(action, dict) and action.get('type') in READ_ACTIONS:
         fetched_context = _fetch_context_for_ai(action)
         if fetched_context:
@@ -811,12 +895,10 @@ def chat():
         if action_result:
             all_results.append(action_result)
 
-        # Multi-Aktions-Loop: bis zu 4 Folgeaktionen ohne Nutzereingabe
-        for _ in range(4):
-            next_action = ai_resp.get('action') if _ == 0 else None
-            # Nach erster Iteration: KI nach weiteren Aktionen fragen
+        # Multi-Aktions-Loop: bis zu 10 Folgeaktionen ohne Nutzereingabe
+        for _ in range(10):
             messages.append({'role': 'assistant', 'content': raw})
-            follow = f'Aktion abgeschlossen: {json.dumps(action_result, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus.'
+            follow = f'Aktion abgeschlossen: {json.dumps(action_result, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. Wenn alles erledigt ist, antworte mit action: null.'
             messages.append({'role': 'user', 'content': follow})
             try:
                 raw = _get_ai_reply(messages)
@@ -828,7 +910,20 @@ def chat():
                 break
             if next_action.get('type') in (None, 'none'):
                 break
-            action_result = _dispatch_action(next_action)
+            # Read-Aktion auch im Loop: zweistufig abhandeln
+            if next_action.get('type') in READ_ACTIONS:
+                fetched = _fetch_context_for_ai(next_action)
+                if fetched:
+                    messages.append({'role': 'assistant', 'content': raw})
+                    messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nFahre mit dem ursprünglichen Auftrag fort.'})
+                    try:
+                        raw = _get_ai_reply(messages)
+                        ai_resp = json.loads(raw)
+                    except Exception:
+                        break
+                action_result = {'type': 'read_done', 'action': next_action.get('type')}
+            else:
+                action_result = _dispatch_action(next_action)
             if action_result:
                 all_results.append(action_result)
             # Letzte Antwort der KI als reply verwenden
