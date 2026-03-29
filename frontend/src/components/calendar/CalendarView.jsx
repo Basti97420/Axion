@@ -5,6 +5,14 @@ import timeGridPlugin from '@fullcalendar/timegrid'
 import interactionPlugin from '@fullcalendar/interaction'
 import deLocale from '@fullcalendar/core/locales/de'
 
+function isoWeek(date) {
+  const d = new Date(date)
+  d.setHours(0, 0, 0, 0)
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7))
+  const yearStart = new Date(d.getFullYear(), 0, 1)
+  return Math.ceil((((d - yearStart) / 86400000) + 1) / 7)
+}
+
 // Status-Farben für Issue-Events
 function issueColor(status, dueDateStr) {
   if (status === 'done' || status === 'cancelled') return '#22c55e'
@@ -207,12 +215,9 @@ export default function CalendarView({
     // Externes Drop: Issue aus Sidebar
     const { type, issueId, issue } = event.extendedProps
     if (type === 'external-issue' && onEntryCreate) {
-      // end = start + 1h wenn kein end gesetzt
       const start = event.startStr
-      const endDate = event.end ?? new Date(new Date(event.start).getTime() + 60 * 60 * 1000)
-      const end = endDate instanceof Date
-        ? endDate.toISOString().replace('Z', '')
-        : endDate
+      // endStr nutzen (Lokalzeit wie startStr) – verhindert UTC-Offset-Bug nach Sommerzeit
+      const end = event.endStr || start
 
       onEntryCreate({ issueId, issue, start, end })
     }
@@ -235,9 +240,12 @@ export default function CalendarView({
         snapDuration="00:15:00"
         slotDuration="00:30:00"
         scrollTime="08:00:00"
+        customButtons={{
+          kwTitle: { text: ' ', click: () => {} },
+        }}
         headerToolbar={{
           left: 'prev,next today',
-          center: 'title',
+          center: 'kwTitle',
           right: 'dayGridMonth,timeGridWeek',
         }}
         nowIndicator={true}
@@ -252,9 +260,17 @@ export default function CalendarView({
         eventResize={handleEventResize}
         eventReceive={handleEventReceive}
         select={handleDateSelect}
-        weekNumbers={true}
-        weekNumberContent={(info) => `KW ${info.num}`}
-        datesSet={(info) => onDatesSet && onDatesSet(info.start)}
+        datesSet={(info) => {
+          onDatesSet && onDatesSet(info.start)
+          requestAnimationFrame(() => {
+            const btn = calendarRef.current?.getApi()?.el?.querySelector('.fc-kwTitle-button')
+            if (!btn) return
+            btn.textContent = info.view.type === 'timeGridWeek'
+              ? `KW ${isoWeek(info.start)}`
+              : info.view.title
+            btn.style.cssText = 'background:none;border:none;box-shadow:none;font-size:1.1rem;font-weight:700;color:inherit;cursor:default;pointer-events:none;padding:0 8px;'
+          })
+        }}
         eventContent={(info) => {
           const { type } = info.event.extendedProps
           if (type === 'workload') return null
