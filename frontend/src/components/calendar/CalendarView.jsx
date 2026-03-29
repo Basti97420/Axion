@@ -249,7 +249,7 @@ export default function CalendarView({
           right: 'dayGridMonth,timeGridWeek',
         }}
         nowIndicator={true}
-        events={[...issueEvents, ...entryEvents, ...cloudEvents, ...workloadEvents]}
+        events={[...issueEvents, ...entryEvents, ...cloudEvents]}
         editable={true}
         selectable={true}
         droppable={true}
@@ -273,27 +273,10 @@ export default function CalendarView({
         }}
         eventContent={(info) => {
           const { type } = info.event.extendedProps
-          if (type === 'workload') return null
           const isEntry = type === 'entry'
           return (
             <div className={`px-1 py-0.5 text-xs truncate font-medium ${isEntry ? 'cursor-pointer' : ''}`}>
               {info.event.title}
-            </div>
-          )
-        }}
-        dayCellContent={(info) => {
-          const w = (worklogSummary || []).find((w) => w.date === info.dateStr)
-          return (
-            <div className="fc-daygrid-day-number flex items-center justify-between w-full px-1">
-              <span>{info.dayNumberText}</span>
-              {w && (
-                <span className={`text-xs font-medium ${
-                  w.total_h > 8 ? 'text-red-600' :
-                  w.total_h > 5 ? 'text-yellow-600' : 'text-green-600'
-                }`}>
-                  ⏱ {w.total_h}h
-                </span>
-              )}
             </div>
           )
         }}
