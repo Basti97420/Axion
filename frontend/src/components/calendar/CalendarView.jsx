@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import FullCalendar from '@fullcalendar/react'
 import dayGridPlugin from '@fullcalendar/daygrid'
 import timeGridPlugin from '@fullcalendar/timegrid'
@@ -68,9 +68,17 @@ export default function CalendarView({
   onEntryIssueOpen,
   onIcloudEventUpdate,
   onDateSelect,
+  onDatesSet,
+  navigateTo,
 }) {
   const calendarRef = useRef(null)
   const [popover, setPopover] = useState(null) // { title, start, end, entryId, issueId, _rect }
+
+  useEffect(() => {
+    if (navigateTo && calendarRef.current) {
+      calendarRef.current.getApi().gotoDate(navigateTo)
+    }
+  }, [navigateTo])
 
   // Issues mit due_date → Ganztags-Events (bleibt unverändert)
   const issueEvents = issues
@@ -244,6 +252,9 @@ export default function CalendarView({
         eventResize={handleEventResize}
         eventReceive={handleEventReceive}
         select={handleDateSelect}
+        weekNumbers={true}
+        weekNumberContent={(info) => `KW ${info.num}`}
+        datesSet={(info) => onDatesSet && onDatesSet(info.start)}
         eventContent={(info) => {
           const { type } = info.event.extendedProps
           if (type === 'workload') return null

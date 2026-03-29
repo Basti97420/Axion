@@ -8,7 +8,7 @@ import Button from '../common/Button'
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
 const CLOSED_STATUSES = ['done', 'cancelled']
 
-export default function IssueList({ projectId, filters, onFiltersChange, onNewIssue, selectedIssueId, draggable, nativeDraggable }) {
+export default function IssueList({ projectId, filters, onFiltersChange, onNewIssue, selectedIssueId, draggable, nativeDraggable, navKey = 0 }) {
   const issues = useIssueStore((s) => s.issues)
   const listRef = useRef(null)
 
@@ -48,7 +48,7 @@ export default function IssueList({ projectId, filters, onFiltersChange, onNewIs
       eventData: (el) => JSON.parse(el.getAttribute('data-fc-event')),
     })
     return () => drag.destroy()
-  }, [draggable, sorted.length])
+  }, [draggable, sorted.length, navKey])
 
   return (
     <div className="flex flex-col flex-1 min-h-0">

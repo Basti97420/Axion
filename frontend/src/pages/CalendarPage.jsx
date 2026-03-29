@@ -10,6 +10,7 @@ import { useIssueStore } from '../store/issueStore'
 import { useCalendarStore } from '../store/calendarStore'
 import CalendarView from '../components/calendar/CalendarView'
 import IssueList from '../components/issues/IssueList'
+import MiniCalendar from '../components/calendar/MiniCalendar'
 import IssueForm from '../components/issues/IssueForm'
 import Modal from '../components/common/Modal'
 
@@ -48,6 +49,9 @@ export default function CalendarPage() {
   const [icloudError, setIcloudError] = useState('')
   const [calError, setCalError] = useState(null)
   const [syncInfo, setSyncInfo] = useState(null)
+  const [navKey, setNavKey] = useState(0)
+  const [currentCalDate, setCurrentCalDate] = useState(new Date())
+  const [navigateTo, setNavigateTo] = useState(null)
 
   useEffect(() => {
     if (!calError) return
@@ -217,17 +221,21 @@ export default function CalendarPage() {
 
   return (
     <div className="flex h-full overflow-hidden">
-      {/* Linke Spalte – Issue-Liste (draggable aktiviert) */}
+      {/* Linke Spalte – Mini-Kalender + Issue-Liste (draggable aktiviert) */}
       <div className="w-80 shrink-0 border-r border-gray-200 flex flex-col overflow-hidden">
-        <div className="px-3 py-2 border-b border-gray-200 shrink-0">
-          <span className="text-sm font-semibold text-gray-700">Issues</span>
+        {/* Mini-Kalender */}
+        <div className="shrink-0 border-b border-gray-200 p-2">
+          <MiniCalendar
+            currentDate={currentCalDate}
+            onWeekSelect={(date) => setNavigateTo(date)}
+          />
           {!icloudConfigured && (
-            <p className="text-xs text-amber-600 mt-1">
+            <p className="text-xs text-amber-600 mt-1 px-1">
               ⚠ iCloud nicht konfiguriert – nur Issue-Termine sichtbar
             </p>
           )}
           {icloudError && (
-            <p className="text-xs text-red-600 mt-1">⚠ {icloudError}</p>
+            <p className="text-xs text-red-600 mt-1 px-1">⚠ {icloudError}</p>
           )}
         </div>
         <IssueList
@@ -236,6 +244,7 @@ export default function CalendarPage() {
           onFiltersChange={setFilters}
           onNewIssue={() => setShowNewIssue(true)}
           draggable={true}
+          navKey={navKey}
         />
       </div>
 
@@ -278,6 +287,11 @@ export default function CalendarPage() {
           onEntryDelete={handleEntryDelete}
           onEntryIssueOpen={handleEntryIssueOpen}
           onIcloudEventUpdate={handleIcloudEventUpdate}
+          navigateTo={navigateTo}
+          onDatesSet={(start) => {
+            setNavKey((k) => k + 1)
+            setCurrentCalDate(start)
+          }}
         />
         </div>
       </div>
