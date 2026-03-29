@@ -567,24 +567,24 @@ function ScriptForm({ script, onSave, onDelete, onRun, running, onRunCell, cellR
 
       {/* Code-Editor mit Developer-Modus-Toggle */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-3">
-            <label className={LABEL_CLASSES + ' mb-0'}>Python-Code</label>
-            <a href="/wiki/axion-python-bibliothek" target="_blank" rel="noreferrer"
-               className="text-xs text-primary-600 hover:underline">
-              📖 Axion Library Docs
-            </a>
+        <div className="flex items-center justify-between border-t border-gray-100 pt-4 mt-2 mb-3">
+          <div>
+            <p className="text-sm font-semibold text-gray-700">✏️ Code</p>
+            <p className="text-xs text-gray-400 mt-0.5">
+              <a href="/wiki/axion-python-bibliothek" target="_blank" rel="noreferrer"
+                 className="text-primary-600 hover:underline">📖 Axion Library Docs</a>
+            </p>
           </div>
           <button
             type="button"
             onClick={toggleNotebookMode}
-            className={`text-xs px-2 py-1 rounded border transition-colors ${
+            className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${
               notebookMode
-                ? 'bg-primary-50 border-primary-300 text-primary-700 font-medium'
-                : 'border-gray-300 text-gray-500 hover:bg-gray-50'
+                ? 'bg-orange-50 border-orange-300 text-orange-700'
+                : 'bg-gray-50 border-gray-300 text-gray-600 hover:bg-gray-100'
             }`}
           >
-            🧪 Developer Modus {notebookMode ? 'an' : 'aus'}
+            🧪 {notebookMode ? 'Notebook-Modus' : 'Einfach-Modus'}
           </button>
         </div>
 
@@ -857,6 +857,12 @@ function FileList({ scriptId }) {
 }
 
 // ---------------------------------------------------------------------------
+const TABS = [
+  { id: 'config', label: '⚙️ Start' },
+  { id: 'files',  label: '📁 Dateien' },
+  { id: 'log',    label: '🕐 Protokoll' },
+]
+
 export default function PythonScriptsPage() {
   const { projectId } = useParams()
   const [scripts, setScripts] = useState([])
@@ -865,10 +871,9 @@ export default function PythonScriptsPage() {
   const [runs, setRuns] = useState([])
   const [running, setRunning] = useState(false)
   const [error, setError] = useState(null)
-  const [tab, setTab] = useState('editor') // 'editor' | 'runs' | 'files'
+  const [activeTab, setActiveTab] = useState('config')
   const [cellOutputs, setCellOutputs] = useState({})   // { cellIndex: run }
   const [cellRunning, setCellRunning] = useState(null)  // cellIndex | null
-  const [sidebarFiles, setSidebarFiles] = useState([])
 
   useEffect(() => {
     pythonScriptsApi.getAll(projectId).then(({ data }) => setScripts(data)).catch(() => {})
@@ -962,15 +967,14 @@ export default function PythonScriptsPage() {
     setSelected(sc)
     setCreating(false)
     setError(null)
-    setTab('editor')
-    pythonScriptsApi.getFiles(sc.id).then(({ data }) => setSidebarFiles(data)).catch(() => setSidebarFiles([]))
+    setActiveTab('config')
   }
 
   function startCreate() {
     setSelected(null)
     setCreating(true)
     setError(null)
-    setTab('editor')
+    setActiveTab('config')
   }
 
   const activeScript = creating ? null : selected
@@ -1010,31 +1014,9 @@ export default function PythonScriptsPage() {
                     <span className="text-xs text-orange-400 shrink-0">🧪</span>
                   )}
                 </div>
-                {sc.description && (
-                  <div className="text-xs text-gray-400 mt-0.5 pl-4 truncate">{sc.description}</div>
-                )}
-                {isSelected && (
-                  <div className="mt-2 pt-2 border-t border-gray-200 space-y-1.5">
-                    <div className="flex flex-wrap gap-1">
-                      {sidebarFiles.slice(0, 3).map((f) => (
-                        <span key={f.filename} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono truncate max-w-[100px]">
-                          {f.filename}
-                        </span>
-                      ))}
-                      {sidebarFiles.length > 3 && (
-                        <span className="text-xs text-gray-400">+{sidebarFiles.length - 3} weitere</span>
-                      )}
-                      {sidebarFiles.length === 0 && (
-                        <span className="text-xs text-gray-300">Keine Dateien</span>
-                      )}
-                    </div>
-                    {runs[0]?.stdout && (
-                      <p className="text-xs text-gray-400 line-clamp-2 italic">
-                        "{runs[0].stdout.slice(0, 120)}{runs[0].stdout.length > 120 ? '…' : ''}"
-                      </p>
-                    )}
-                  </div>
-                )}
+                <div className="text-xs text-gray-400 mt-0.5 pl-4">
+                  {sc.last_run_at ? formatDateTime(sc.last_run_at) : 'Noch nicht ausgeführt'}
+                </div>
               </div>
             )
           })}
@@ -1058,21 +1040,17 @@ export default function PythonScriptsPage() {
               </h2>
               {selected && (
                 <div className="flex gap-1 p-1 bg-gray-100 rounded-full shrink-0">
-                  {[
-                    { key: 'editor', label: 'Editor' },
-                    { key: 'runs',   label: `Protokoll (${runs.length})` },
-                    { key: 'files',  label: 'Dateien' },
-                  ].map(({ key, label }) => (
+                  {TABS.map((tab) => (
                     <button
-                      key={key}
-                      onClick={() => setTab(key)}
+                      key={tab.id}
+                      onClick={() => setActiveTab(tab.id)}
                       className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
-                        tab === key
+                        activeTab === tab.id
                           ? 'bg-white text-gray-900 shadow-sm'
                           : 'text-gray-500 hover:text-gray-700'
                       }`}
                     >
-                      {label}
+                      {tab.label}
                     </button>
                   ))}
                 </div>
@@ -1085,23 +1063,56 @@ export default function PythonScriptsPage() {
               </div>
             )}
 
-            {(tab === 'editor' || creating) && (
-              <ScriptForm
-                key={creating ? 'new' : (selected?.id ?? 'none')}
-                script={activeScript}
-                onSave={handleSave}
-                onDelete={handleDelete}
-                onRun={handleRun}
-                running={running}
-                onRunCell={selected ? handleRunCell : null}
-                cellRunning={cellRunning}
-                cellOutputs={cellOutputs}
-              />
+            {/* ⚙️ Start */}
+            {(activeTab === 'config' || creating) && (
+              <>
+                <ScriptForm
+                  key={creating ? 'new' : (selected?.id ?? 'none')}
+                  script={activeScript}
+                  onSave={handleSave}
+                  onDelete={handleDelete}
+                  onRun={handleRun}
+                  running={running}
+                  onRunCell={selected ? handleRunCell : null}
+                  cellRunning={cellRunning}
+                  cellOutputs={cellOutputs}
+                />
+                {selected && runs[0] && (runs[0].stdout || runs[0].stderr) && (
+                  <div className="mt-6 border-t border-gray-100 pt-5">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                      📋 Letzter Output
+                      {runs[0].exit_code !== 0 && runs[0].exit_code !== null && (
+                        <span className="ml-2 text-xs text-red-500 font-normal">exit {runs[0].exit_code}</span>
+                      )}
+                    </h3>
+                    {runs[0].stdout && (
+                      <pre className="text-xs text-gray-800 bg-gray-50 rounded-lg p-4 border border-gray-200 overflow-x-auto whitespace-pre-wrap max-h-64 overflow-y-auto">
+                        {runs[0].stdout}
+                      </pre>
+                    )}
+                    {runs[0].stderr && (
+                      <pre className="mt-2 text-xs text-red-600 bg-red-50 rounded-lg p-3 border border-red-100 overflow-x-auto whitespace-pre-wrap max-h-32 overflow-y-auto">
+                        {runs[0].stderr}
+                      </pre>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
-            {tab === 'runs' && selected && (
-              <div>
-                <div className="flex justify-end mb-3">
+            {/* 📁 Dateien */}
+            {activeTab === 'files' && selected && (
+              <>
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">📁 Workspace-Dateien</h3>
+                <FileList scriptId={selected.id} />
+              </>
+            )}
+
+            {/* 🕐 Protokoll */}
+            {activeTab === 'log' && selected && (
+              <>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-semibold text-gray-700">🕐 Protokoll</h3>
                   <button
                     onClick={() => pythonScriptsApi.getRuns(selected.id).then(({ data }) => setRuns(data))}
                     className="text-xs text-primary-600 hover:underline"
@@ -1110,11 +1121,7 @@ export default function PythonScriptsPage() {
                   </button>
                 </div>
                 <RunList runs={runs} />
-              </div>
-            )}
-
-            {tab === 'files' && selected && (
-              <FileList scriptId={selected.id} />
+              </>
             )}
           </>
         )}
