@@ -27,7 +27,6 @@ def create_agent(project_id):
     agent = KiAgent(
         project_id=project_id,
         name=name,
-        prompt=data.get('prompt', ''),
         api_provider=data.get('api_provider', 'global'),
         api_url=data.get('api_url', ''),
         api_model=data.get('api_model', ''),
@@ -60,7 +59,7 @@ def get_agent(agent_id):
 def update_agent(agent_id):
     agent = db.get_or_404(KiAgent, agent_id)
     data = request.get_json() or {}
-    for field in ('name', 'prompt', 'api_provider', 'api_url', 'api_model', 'website_url',
+    for field in ('name', 'api_provider', 'api_url', 'api_model', 'website_url',
                   'schedule_type', 'is_active', 'dry_run', 'notify_telegram',
                   'retry_on_error', 'retry_max', 'retry_delay_min'):
         if field in data:
@@ -159,3 +158,37 @@ def delete_file(agent_id, filename):
         return jsonify({'error': 'Datei nicht gefunden'}), 404
     os.remove(fpath)
     return jsonify({'ok': True})
+
+
+@bp.get('/api/ki-agents/<int:agent_id>/prompt')
+@login_required
+def get_prompt(agent_id):
+    """Liest agenten.md aus dem Workspace und gibt den Inhalt zurück."""
+    agent = db.get_or_404(KiAgent, agent_id)
+    workspace_dir = _agent_workspace_dir(agent)
+    fpath = os.path.join(workspace_dir, 'agenten.md')
+    if not os.path.isfile(fpath):
+        return jsonify({'content': ''})
+    try:
+        with open(fpath, 'r', encoding='utf-8') as f:
+            return jsonify({'content': f.read()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.put('/api/ki-agents/<int:agent_id>/prompt')
+@login_required
+def save_prompt(agent_id):
+    """Schreibt agenten.md in den Workspace des Agenten."""
+    agent = db.get_or_404(KiAgent, agent_id)
+    data = request.get_json() or {}
+    content = data.get('content', '')
+    workspace_dir = _agent_workspace_dir(agent)
+    os.makedirs(workspace_dir, exist_ok=True)
+    fpath = os.path.join(workspace_dir, 'agenten.md')
+    try:
+        with open(fpath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

@@ -11,4 +11,6 @@ export const kiAgentsApi = {
   getFiles:   (id) => client.get(`/ki-agents/${id}/files`),
   deleteFile: (id, filename) => client.delete(`/ki-agents/${id}/files/${encodeURIComponent(filename)}`),
   fileUrl:    (id, filename) => `/api/ki-agents/${id}/files/${encodeURIComponent(filename)}`,
+  getPrompt:  (id) => client.get(`/ki-agents/${id}/prompt`),
+  savePrompt: (id, content) => client.put(`/ki-agents/${id}/prompt`, { content }),
 }

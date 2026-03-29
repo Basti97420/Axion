@@ -9,7 +9,6 @@ class KiAgent(db.Model):
     id            = db.Column(db.Integer, primary_key=True)
     project_id    = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     name          = db.Column(db.String(120), nullable=False)
-    prompt        = db.Column(db.Text, default='')
     api_provider  = db.Column(db.String(20), default='global')  # 'global' | 'ollama' | 'claude'
     api_url       = db.Column(db.String(500), default='')   # Ollama-Host, leer = global default
     api_model     = db.Column(db.String(100), default='')
@@ -37,7 +36,6 @@ class KiAgent(db.Model):
             'id':            self.id,
             'project_id':    self.project_id,
             'name':          self.name,
-            'prompt':        self.prompt,
             'api_provider':  self.api_provider,
             'api_url':       self.api_url,
             'api_model':     self.api_model,

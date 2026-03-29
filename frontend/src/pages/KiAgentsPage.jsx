@@ -23,10 +23,9 @@ const TEMPLATES = [
 const FIELD_CLASSES = 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full'
 const LABEL_CLASSES = 'block text-xs font-medium text-gray-600 mb-1'
 
-function AgentForm({ agent, onSave, onDelete, onRun, running }) {
+function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate }) {
   const [form, setForm] = useState({
     name: agent?.name || '',
-    prompt: agent?.prompt || '',
     api_provider: agent?.api_provider || 'global',
     api_url: agent?.api_url || '',
     api_model: agent?.api_model || '',
@@ -56,7 +55,7 @@ function AgentForm({ agent, onSave, onDelete, onRun, running }) {
   }
 
   function applyTemplate(tpl) {
-    setForm((f) => ({ ...f, prompt: tpl.prompt }))
+    if (onApplyTemplate) onApplyTemplate(tpl.prompt)
   }
 
   function handleSubmit(e) {
@@ -90,23 +89,6 @@ function AgentForm({ agent, onSave, onDelete, onRun, running }) {
           onChange={(e) => set('name', e.target.value)}
           required
           placeholder="Mein Agent"
-          className={FIELD_CLASSES}
-        />
-      </div>
-
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <label className={LABEL_CLASSES + ' mb-0'}>Aufgabe (Prompt)</label>
-          <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
-             className="text-xs text-primary-600 hover:underline">
-            📖 Aktionen & Konfiguration
-          </a>
-        </div>
-        <textarea
-          value={form.prompt}
-          onChange={(e) => set('prompt', e.target.value)}
-          rows={5}
-          placeholder="Beschreibe was der Agent tun soll…"
           className={FIELD_CLASSES}
         />
       </div>
@@ -557,6 +539,7 @@ function StatsPanel({ runs, agent }) {
 
 const TABS = [
   { id: 'config', label: '⚙️ Konfiguration' },
+  { id: 'prompt', label: '📝 Prompt' },
   { id: 'files', label: '📁 Dateien' },
   { id: 'log', label: '🕐 Protokoll' },
   { id: 'stats', label: '📊 Statistiken' },
@@ -573,6 +556,9 @@ export default function KiAgentsPage() {
   const [filesKey, setFilesKey] = useState(0)
   const [activeTab, setActiveTab] = useState('config')
   const [sidebarFiles, setSidebarFiles] = useState([])
+  const [promptContent, setPromptContent] = useState('')
+  const [promptDirty, setPromptDirty] = useState(false)
+  const [promptSaving, setPromptSaving] = useState(false)
 
   useEffect(() => {
     kiAgentsApi.getAll(projectId).then(({ data }) => setAgents(data)).catch(() => {})
@@ -639,6 +625,22 @@ export default function KiAgentsPage() {
     setError(null)
     setActiveTab('config')
     kiAgentsApi.getFiles(agent.id).then(({ data }) => setSidebarFiles(data)).catch(() => setSidebarFiles([]))
+    kiAgentsApi.getPrompt(agent.id).then(({ data }) => { setPromptContent(data.content || ''); setPromptDirty(false) }).catch(() => setPromptContent(''))
+  }
+
+  async function savePrompt() {
+    if (!selected) return
+    setPromptSaving(true)
+    try {
+      await kiAgentsApi.savePrompt(selected.id, promptContent)
+      setPromptDirty(false)
+      setFilesKey((k) => k + 1)
+      kiAgentsApi.getFiles(selected.id).then(({ data }) => setSidebarFiles(data)).catch(() => {})
+    } catch (e) {
+      setError('Fehler beim Speichern des Prompts')
+    } finally {
+      setPromptSaving(false)
+    }
   }
 
   function startCreate() {
@@ -768,6 +770,7 @@ export default function KiAgentsPage() {
                     onDelete={handleDelete}
                     onRun={handleRun}
                     running={running}
+                    onApplyTemplate={(text) => { setPromptContent(text); setPromptDirty(true); setActiveTab('prompt') }}
                   />
                   {selected && selected.workspace && (
                     <div className="mt-6 border-t border-gray-200 pt-4">
@@ -781,6 +784,47 @@ export default function KiAgentsPage() {
                     </div>
                   )}
                 </>
+              )}
+
+              {/* Prompt (agenten.md) */}
+              {activeTab === 'prompt' && selected && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-semibold text-gray-700">Auftrag des Agenten</p>
+                      <p className="text-xs text-gray-400 mt-0.5">Gespeichert als <code className="bg-gray-100 px-1 rounded">agenten.md</code> im Workspace</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
+                         className="text-xs text-primary-600 hover:underline">📖 Aktionen</a>
+                      <button
+                        onClick={savePrompt}
+                        disabled={!promptDirty || promptSaving}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                          promptDirty && !promptSaving
+                            ? 'bg-primary-600 text-white hover:bg-primary-700'
+                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        {promptSaving ? 'Speichern…' : promptDirty ? 'Speichern*' : 'Gespeichert'}
+                      </button>
+                    </div>
+                  </div>
+                  <textarea
+                    value={promptContent}
+                    onChange={(e) => { setPromptContent(e.target.value); setPromptDirty(true) }}
+                    rows={24}
+                    placeholder="Beschreibe hier den Auftrag des Agenten (Markdown)…
+
+Beispiel:
+Erstelle jeden Montag einen Wochenbericht für dieses Projekt.
+Fasse alle offenen Issues zusammen und schreibe das Ergebnis als bericht.md."
+                    className="w-full font-mono text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                  />
+                  <p className="text-xs text-gray-400">
+                    💡 Der Agent liest beim Start automatisch diese Datei sowie <code className="bg-gray-100 px-1 rounded">memory.md</code> (sein Gedächtnis) ein.
+                  </p>
+                </div>
               )}
 
               {/* Dateien */}

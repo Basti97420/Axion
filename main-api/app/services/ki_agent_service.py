@@ -33,7 +33,7 @@ def _get_workspace_dir(agent):
     )
 
 
-def _build_context(agent):
+def _build_context(agent, memory_content=''):
     """Baut den Kontext-String für den Agenten auf."""
     from app.models.project import Project
     from app.models.issue import Issue
@@ -42,6 +42,9 @@ def _build_context(agent):
     from datetime import date
 
     parts = [f'Heute: {date.today().isoformat()}']
+
+    if memory_content:
+        parts.append(f'## Dein Gedächtnis (memory.md)\n{memory_content[:2000]}')
 
     proj = Project.query.get(agent.project_id)
     if proj:
@@ -171,7 +174,12 @@ Prioritäten: low, medium, high, critical
 Typen: task, bug, story, epic
 Erlaubte Dateiendungen: .md, .txt, .csv
 
-Aufgabe des Agenten:
+WICHTIG – Gedächtnis:
+Am Ende jedes Runs aktualisierst du deine memory.md im Workspace mit:
+- Was du in diesem Run getan hast
+- Wichtige Erkenntnisse und offene Punkte
+- Den aktuellen Status deiner Aufgabe
+Nutze dafür die create_file-Aktion mit filename="memory.md".
 """
 
 
@@ -203,8 +211,28 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
             'current_agent_id': agent.id,
         }
 
-        context_str = _build_context(agent)
-        system_content = AGENT_SYSTEM_PROMPT + agent.prompt
+        # agenten.md lesen → Auftrag des Agenten
+        agent_prompt = ''
+        agenten_md_path = os.path.join(workspace_dir, 'agenten.md')
+        if os.path.exists(agenten_md_path):
+            try:
+                with open(agenten_md_path, 'r', encoding='utf-8') as f:
+                    agent_prompt = f.read()
+            except Exception:
+                pass
+
+        # memory.md lesen → persistentes Gedächtnis
+        memory_content = ''
+        memory_md_path = os.path.join(workspace_dir, 'memory.md')
+        if os.path.exists(memory_md_path):
+            try:
+                with open(memory_md_path, 'r', encoding='utf-8') as f:
+                    memory_content = f.read()
+            except Exception:
+                pass
+
+        context_str = _build_context(agent, memory_content=memory_content)
+        system_content = AGENT_SYSTEM_PROMPT + "\n\n# Dein Auftrag\n" + agent_prompt
         messages = [
             {'role': 'system', 'content': system_content},
             {'role': 'user', 'content': context_str},
