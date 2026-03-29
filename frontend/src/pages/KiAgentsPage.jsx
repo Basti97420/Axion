@@ -26,14 +26,9 @@ const LABEL_CLASSES = 'block text-xs font-medium text-gray-600 mb-1'
 function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate }) {
   const [form, setForm] = useState({
     name: agent?.name || '',
-    api_provider: agent?.api_provider || 'global',
-    api_url: agent?.api_url || '',
-    api_model: agent?.api_model || '',
-    api_key: '',
     schedule_type: agent?.schedule_type || 'manual',
     interval_min: agent?.interval_min || 60,
     schedule_days: agent?.schedule_days ?? null,
-    website_url: agent?.website_url || '',
     is_active: agent?.is_active ?? true,
     dry_run: agent?.dry_run ?? false,
     notify_telegram: agent?.notify_telegram ?? false,
@@ -95,51 +90,6 @@ function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate })
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={LABEL_CLASSES}>KI-Provider</label>
-          <select value={form.api_provider} onChange={(e) => set('api_provider', e.target.value)} className={FIELD_CLASSES}>
-            <option value="global">Global (Standard)</option>
-            <option value="ollama">Ollama</option>
-            <option value="claude">Claude API</option>
-          </select>
-        </div>
-        <div>
-          <label className={LABEL_CLASSES}>Modell (leer = Standard)</label>
-          <input
-            value={form.api_model}
-            onChange={(e) => set('api_model', e.target.value)}
-            placeholder="z.B. llama3:8b"
-            className={FIELD_CLASSES}
-          />
-        </div>
-      </div>
-
-      {form.api_provider === 'ollama' && (
-        <div>
-          <label className={LABEL_CLASSES}>Ollama Host-URL (leer = global)</label>
-          <input
-            value={form.api_url}
-            onChange={(e) => set('api_url', e.target.value)}
-            placeholder="http://192.168.1.100:11434"
-            className={FIELD_CLASSES}
-          />
-        </div>
-      )}
-
-      {form.api_provider === 'claude' && (
-        <div>
-          <label className={LABEL_CLASSES}>API-Key (leer = Standard)</label>
-          <input
-            type="password"
-            value={form.api_key}
-            onChange={(e) => set('api_key', e.target.value)}
-            placeholder={agent?.api_key ? '••••••••' : 'Optional'}
-            className={FIELD_CLASSES}
-          />
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3">
-        <div>
           <label className={LABEL_CLASSES}>Häufigkeit</label>
           <select value={form.schedule_type} onChange={(e) => set('schedule_type', e.target.value)} className={FIELD_CLASSES}>
             <option value="manual">Manuell</option>
@@ -185,16 +135,6 @@ function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate })
           <p className="text-xs text-gray-400 mt-1">Alle aktiv = jeden Tag</p>
         </div>
       )}
-
-      <div>
-        <label className={LABEL_CLASSES}>Website URL (optional)</label>
-        <input
-          value={form.website_url}
-          onChange={(e) => set('website_url', e.target.value)}
-          placeholder="https://example.com"
-          className={FIELD_CLASSES}
-        />
-      </div>
 
       {/* Optionen */}
       <div className="space-y-2">
@@ -253,6 +193,100 @@ function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate })
             Löschen
           </Button>
         )}
+      </div>
+    </form>
+  )
+}
+
+function ModelConfigForm({ agent, onSave }) {
+  const [form, setForm] = useState({
+    api_provider: agent?.api_provider || 'global',
+    api_url: agent?.api_url || '',
+    api_model: agent?.api_model || '',
+    api_key: '',
+    website_url: agent?.website_url || '',
+  })
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    setForm({
+      api_provider: agent?.api_provider || 'global',
+      api_url: agent?.api_url || '',
+      api_model: agent?.api_model || '',
+      api_key: '',
+      website_url: agent?.website_url || '',
+    })
+  }, [agent?.id])
+
+  function set(key, val) { setForm((f) => ({ ...f, [key]: val })) }
+
+  async function handleSave(e) {
+    e.preventDefault()
+    setSaving(true)
+    await onSave(form)
+    setSaving(false)
+  }
+
+  return (
+    <form onSubmit={handleSave} className="space-y-4">
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={LABEL_CLASSES}>KI-Provider</label>
+          <select value={form.api_provider} onChange={(e) => set('api_provider', e.target.value)} className={FIELD_CLASSES}>
+            <option value="global">Global (Standard)</option>
+            <option value="ollama">Ollama</option>
+            <option value="claude">Claude API</option>
+          </select>
+        </div>
+        <div>
+          <label className={LABEL_CLASSES}>Modell (leer = Standard)</label>
+          <input
+            value={form.api_model}
+            onChange={(e) => set('api_model', e.target.value)}
+            placeholder="z.B. llama3:8b"
+            className={FIELD_CLASSES}
+          />
+        </div>
+      </div>
+
+      {form.api_provider === 'ollama' && (
+        <div>
+          <label className={LABEL_CLASSES}>Ollama Host-URL (leer = global)</label>
+          <input
+            value={form.api_url}
+            onChange={(e) => set('api_url', e.target.value)}
+            placeholder="http://192.168.1.100:11434"
+            className={FIELD_CLASSES}
+          />
+        </div>
+      )}
+
+      {form.api_provider === 'claude' && (
+        <div>
+          <label className={LABEL_CLASSES}>API-Key (leer = Standard)</label>
+          <input
+            type="password"
+            value={form.api_key}
+            onChange={(e) => set('api_key', e.target.value)}
+            placeholder={agent?.api_key ? '••••••••' : 'Optional'}
+            className={FIELD_CLASSES}
+          />
+        </div>
+      )}
+
+      <div>
+        <label className={LABEL_CLASSES}>Website URL (optional)</label>
+        <input
+          value={form.website_url}
+          onChange={(e) => set('website_url', e.target.value)}
+          placeholder="https://example.com"
+          className={FIELD_CLASSES}
+        />
+        <p className="text-xs text-gray-400 mt-1">Wird beim Run abgerufen und als Kontext mitgegeben.</p>
+      </div>
+
+      <div className="pt-1">
+        <Button type="submit" loading={saving}>Speichern</Button>
       </div>
     </form>
   )
@@ -538,11 +572,11 @@ function StatsPanel({ runs, agent }) {
 }
 
 const TABS = [
-  { id: 'config', label: '⚙️ Konfiguration' },
-  { id: 'prompt', label: '📝 Prompt' },
-  { id: 'files', label: '📁 Dateien' },
-  { id: 'log', label: '🕐 Protokoll' },
-  { id: 'stats', label: '📊 Statistiken' },
+  { id: 'config', label: '⚙️ Start' },
+  { id: 'model',  label: '🤖 Modell' },
+  { id: 'files',  label: '📁 Dateien' },
+  { id: 'log',    label: '🕐 Protokoll' },
+  { id: 'stats',  label: '📊 Statistiken' },
 ]
 
 export default function KiAgentsPage() {
@@ -555,7 +589,6 @@ export default function KiAgentsPage() {
   const [error, setError] = useState(null)
   const [filesKey, setFilesKey] = useState(0)
   const [activeTab, setActiveTab] = useState('config')
-  const [sidebarFiles, setSidebarFiles] = useState([])
   const [promptContent, setPromptContent] = useState('')
   const [promptDirty, setPromptDirty] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
@@ -610,7 +643,6 @@ export default function KiAgentsPage() {
           setAgents((a) => a.map((ag) => ag.id === data.id ? data : ag))
         }).catch(() => {})
         setFilesKey((k) => k + 1)
-        kiAgentsApi.getFiles(selected.id).then(({ data }) => setSidebarFiles(data)).catch(() => {})
         setRunning(false)
       }, 2000)
     } catch (e) {
@@ -624,7 +656,6 @@ export default function KiAgentsPage() {
     setCreating(false)
     setError(null)
     setActiveTab('config')
-    kiAgentsApi.getFiles(agent.id).then(({ data }) => setSidebarFiles(data)).catch(() => setSidebarFiles([]))
     kiAgentsApi.getPrompt(agent.id).then(({ data }) => { setPromptContent(data.content || ''); setPromptDirty(false) }).catch(() => setPromptContent(''))
   }
 
@@ -635,7 +666,6 @@ export default function KiAgentsPage() {
       await kiAgentsApi.savePrompt(selected.id, promptContent)
       setPromptDirty(false)
       setFilesKey((k) => k + 1)
-      kiAgentsApi.getFiles(selected.id).then(({ data }) => setSidebarFiles(data)).catch(() => {})
     } catch (e) {
       setError('Fehler beim Speichern des Prompts')
     } finally {
@@ -679,40 +709,8 @@ export default function KiAgentsPage() {
                   {agent.retry_on_error && <span className="text-xs text-blue-400 shrink-0">🔄</span>}
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5 pl-4">
-                  {agent.last_run_at ? `Letzter Run: ${formatDateTime(agent.last_run_at)}` : 'Noch nicht ausgeführt'}
+                  {agent.last_run_at ? formatDateTime(agent.last_run_at) : 'Noch nicht ausgeführt'}
                 </div>
-                <div className="text-xs text-gray-400 pl-4">
-                  {agent.schedule_type === 'interval' ? (
-                    <>
-                      ⏱ alle {agent.interval_min} Min
-                      {agent.schedule_days && agent.schedule_days.length < 7 && (
-                        <> · {['Mo','Di','Mi','Do','Fr','Sa','So'].filter((_, i) => agent.schedule_days.includes(i)).join(' ')}</>
-                      )}
-                    </>
-                  ) : 'Manuell'}
-                </div>
-                {isSelected && (
-                  <div className="mt-2 pt-2 border-t border-gray-200 space-y-1.5">
-                    <div className="flex flex-wrap gap-1">
-                      {sidebarFiles.slice(0, 3).map((f) => (
-                        <span key={f.filename} className="text-xs bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded font-mono truncate max-w-[100px]">
-                          {f.filename}
-                        </span>
-                      ))}
-                      {sidebarFiles.length > 3 && (
-                        <span className="text-xs text-gray-400">+{sidebarFiles.length - 3} weitere</span>
-                      )}
-                      {sidebarFiles.length === 0 && (
-                        <span className="text-xs text-gray-300">Keine Dateien</span>
-                      )}
-                    </div>
-                    {agent.workspace && (
-                      <p className="text-xs text-gray-400 line-clamp-2 italic">
-                        "{agent.workspace.slice(0, 120)}{agent.workspace.length > 120 ? '…' : ''}"
-                      </p>
-                    )}
-                  </div>
-                )}
               </div>
             )
           })}
@@ -770,12 +768,52 @@ export default function KiAgentsPage() {
                     onDelete={handleDelete}
                     onRun={handleRun}
                     running={running}
-                    onApplyTemplate={(text) => { setPromptContent(text); setPromptDirty(true); setActiveTab('prompt') }}
+                    onApplyTemplate={(text) => { setPromptContent(text); setPromptDirty(true); setActiveTab('config') }}
                   />
-                  {selected && selected.workspace && (
-                    <div className="mt-6 border-t border-gray-200 pt-4">
+                  {selected && (
+                    <div className="mt-6 border-t border-gray-100 pt-5 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm font-semibold text-gray-700">📝 agenten.md</p>
+                          <p className="text-xs text-gray-400 mt-0.5">Auftrag des Agenten · wird beim Run eingelesen</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
+                             className="text-xs text-primary-600 hover:underline">📖 Aktionen</a>
+                          <button
+                            onClick={savePrompt}
+                            disabled={!promptDirty || promptSaving}
+                            className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                              promptDirty && !promptSaving
+                                ? 'bg-primary-600 text-white hover:bg-primary-700'
+                                : 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            }`}
+                          >
+                            {promptSaving ? 'Speichern…' : promptDirty ? 'Speichern*' : 'Gespeichert'}
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={promptContent}
+                        onChange={(e) => { setPromptContent(e.target.value); setPromptDirty(true) }}
+                        rows={14}
+                        placeholder="Beschreibe hier den Auftrag des Agenten (Markdown)…
+
+Beispiel:
+Erstelle jeden Montag einen Wochenbericht für dieses Projekt.
+Fasse alle offenen Issues zusammen und schreibe das Ergebnis als bericht.md."
+                        className="w-full font-mono text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
+                      />
+                      <p className="text-xs text-gray-400">
+                        💡 Der Agent liest beim Start automatisch diese Datei sowie <code className="bg-gray-100 px-1 rounded">memory.md</code> (sein Gedächtnis) ein.
+                      </p>
+                    </div>
+                  )}
+
+                  {selected?.workspace && (
+                    <div className="mt-6 border-t border-gray-100 pt-5">
                       <h3 className="text-sm font-semibold text-gray-700 mb-2">
-                        📋 Workspace (letzter Output)
+                        📋 Letzter Output
                         {selected.dry_run && <span className="ml-2 text-xs text-orange-500 font-normal">[Simulation]</span>}
                       </h3>
                       <div className="prose prose-sm max-w-none bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -786,45 +824,12 @@ export default function KiAgentsPage() {
                 </>
               )}
 
-              {/* Prompt (agenten.md) */}
-              {activeTab === 'prompt' && selected && (
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-semibold text-gray-700">Auftrag des Agenten</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Gespeichert als <code className="bg-gray-100 px-1 rounded">agenten.md</code> im Workspace</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
-                         className="text-xs text-primary-600 hover:underline">📖 Aktionen</a>
-                      <button
-                        onClick={savePrompt}
-                        disabled={!promptDirty || promptSaving}
-                        className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                          promptDirty && !promptSaving
-                            ? 'bg-primary-600 text-white hover:bg-primary-700'
-                            : 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                        }`}
-                      >
-                        {promptSaving ? 'Speichern…' : promptDirty ? 'Speichern*' : 'Gespeichert'}
-                      </button>
-                    </div>
-                  </div>
-                  <textarea
-                    value={promptContent}
-                    onChange={(e) => { setPromptContent(e.target.value); setPromptDirty(true) }}
-                    rows={24}
-                    placeholder="Beschreibe hier den Auftrag des Agenten (Markdown)…
-
-Beispiel:
-Erstelle jeden Montag einen Wochenbericht für dieses Projekt.
-Fasse alle offenen Issues zusammen und schreibe das Ergebnis als bericht.md."
-                    className="w-full font-mono text-sm border border-gray-200 rounded-lg p-3 resize-y focus:outline-none focus:ring-2 focus:ring-primary-500 bg-gray-50"
-                  />
-                  <p className="text-xs text-gray-400">
-                    💡 Der Agent liest beim Start automatisch diese Datei sowie <code className="bg-gray-100 px-1 rounded">memory.md</code> (sein Gedächtnis) ein.
-                  </p>
-                </div>
+              {/* Modell */}
+              {activeTab === 'model' && selected && (
+                <>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-4">🤖 KI-Modell &amp; Konfiguration</h3>
+                  <ModelConfigForm agent={selected} onSave={handleSave} />
+                </>
               )}
 
               {/* Dateien */}
