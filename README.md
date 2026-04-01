@@ -137,7 +137,7 @@ iCloud, KI und Telegram werden über `/settings` (Admin) konfiguriert – kein N
 ## Features
 
 - **Issue Tracking**: Kanban board, priorities, status workflow, tags, subtasks
-- **Worklog**: Timer + manual entry per issue, daily workload summary in calendar
+- **Worklog**: Timer + manual entry per issue, daily workload summary in calendar; calendar entries linked to issues are automatically logged as worklogs when they expire
 - **iCloud Calendar**: Sync events, create appointments from issues, view alongside deadlines
 - **Wiki**: Hierarchical pages with Markdown editor, `[[WikiLink]]` syntax, file attachments
 - **Global Search**: `Cmd+K` searches Issues, Comments, and Wiki pages in parallel

@@ -100,6 +100,10 @@ def create_app():
     from .services import python_script_scheduler
     python_script_scheduler.start(app)
 
+    # Worklog-Scheduler starten (Kalendereinträge → automatische Worklogs)
+    from .services import worklog_scheduler
+    worklog_scheduler.start(app)
+
     # Python-Script-Token generieren falls noch nicht vorhanden
     with app.app_context():
         try:

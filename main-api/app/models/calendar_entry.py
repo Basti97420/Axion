@@ -17,6 +17,11 @@ class CalendarEntry(db.Model):
     issue = db.relationship('Issue', backref=db.backref('calendar_entries', lazy='dynamic'))
 
     def to_dict(self):
+        from app.models.worklog import Worklog
+        from app import db
+        worklog_logged = db.session.query(Worklog).filter_by(
+            calendar_entry_id=self.id
+        ).first() is not None
         return {
             'id': self.id,
             'issue_id': self.issue_id,
@@ -29,4 +34,5 @@ class CalendarEntry(db.Model):
             'issue_title': self.issue.title if self.issue else None,
             'issue_status': self.issue.status if self.issue else None,
             'issue_priority': self.issue.priority if self.issue else None,
+            'worklog_logged': worklog_logged,
         }

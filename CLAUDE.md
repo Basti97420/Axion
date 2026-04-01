@@ -126,6 +126,7 @@ main-api/
       python_script_scheduler.py # Daemon-Thread: prüft alle 30s auf fällige Scripts
       ki_agent_service.py        # run_agent() mit Aktions-Loop
       ki_agent_scheduler.py      # Daemon-Thread: prüft alle 30s auf fällige Agenten
+      worklog_scheduler.py       # Daemon-Thread: prüft alle 60s auf abgelaufene Kalendereinträge → Auto-Worklog
       axion_helper_template.py   # axion.py Template (wird in jeden Script-Subprocess injiziert)
     __init__.py      # create_app(), Blueprint-Registrierung
   migrations/        # Alembic-Migrationen
@@ -308,3 +309,4 @@ Interne Endpunkte (Token: `X-Script-Token`):
 - **Kalender-Sync in main-api**: `/api/calendar/*` via `app/routes/calendar_sync.py`, Services `icloud_client.py` + `event_mapper.py` in `app/services/`
 - **Kanban DnD**: Verwendet ausschließlich `useDraggable` + `useDroppable` aus `@dnd-kit/core` — kein `SortableContext`/`useSortable`, da cross-column Drag damit fehlschlägt. `DragOverlay` rendert inline-div (kein `KanbanCard`), um doppelte ID-Registrierung zu vermeiden.
 - **IssueDetail Tab-Layout**: Alle Tab-Inhalte (activity, comments, worklog, attachments) müssen im `max-w-3xl mx-auto p-6`-Container liegen — der schließende `</div>` kommt erst nach dem letzten Tab-Block, nicht nach comments.
+- **Auto-Worklog-Scheduler**: `worklog_scheduler.py` – Daemon-Thread, alle 60s. Prüft abgelaufene `CalendarEntry`-Einträge mit `issue_id != NULL`. Legt automatisch einen `Worklog`-Eintrag an (`user_id=null`, `calendar_entry_id` gesetzt zur Idempotenz). `CalendarEntry.to_dict()` enthält `worklog_logged: bool` für das Frontend.
