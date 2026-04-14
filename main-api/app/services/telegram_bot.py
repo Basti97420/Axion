@@ -6,6 +6,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 import requests
@@ -73,6 +74,8 @@ def load_tg_config() -> dict:
             'notify_on_create':        read('TELEGRAM_NOTIFY_ON_CREATE',        os.getenv('TELEGRAM_NOTIFY_ON_CREATE',        'true')) == 'true',
             'notify_on_status_change': read('TELEGRAM_NOTIFY_ON_STATUS_CHANGE', os.getenv('TELEGRAM_NOTIFY_ON_STATUS_CHANGE', 'true')) == 'true',
             'notify_interval_min':     notify_interval,
+            'context_minutes':         int(read('TELEGRAM_CONTEXT_MINUTES', '60') or 60),
+            'context_max_messages':    int(read('TELEGRAM_CONTEXT_MAX_MESSAGES', '10') or 10),
         }
     except Exception:
         return DEFAULT_CONFIG.copy()
@@ -100,13 +103,15 @@ def _get_updates(token: str, offset: int) -> list:
     return []
 
 
-def _send(token: str, chat_id: str, text: str) -> None:
+def _send(token: str, chat_id: str, text: str, log_outgoing: bool = True) -> None:
     try:
         requests.post(
             f'{_base(token)}/sendMessage',
             json={'chat_id': chat_id, 'text': text, 'parse_mode': 'HTML'},
             timeout=10,
         )
+        if log_outgoing:
+            _log_telegram_message(chat_id, text, 'outgoing')
     except Exception as e:
         logger.warning('Telegram sendMessage Fehler: %s', e)
 
@@ -142,10 +147,55 @@ def _register_commands(token: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Telegram message logging (for KI context)
+# ---------------------------------------------------------------------------
+
+def _log_telegram_message(chat_id: str, text: str, direction: str) -> None:
+    """Speichert eine Nachricht für den KI-Kontext."""
+    try:
+        from app import db
+        from app.models.telegram_message import TelegramMessage
+        msg = TelegramMessage(chat_id=chat_id, text=text[:4000], direction=direction)
+        db.session.add(msg)
+        db.session.commit()
+    except Exception as e:
+        logger.warning('TelegramMessage log error: %s', e)
+
+
+def _build_telegram_context(chat_id: str) -> str:
+    """Baut Kontext-String aus den letzten Nachrichten des Chats."""
+    try:
+        cfg = load_tg_config()
+        minutes = cfg.get('context_minutes', 60)
+        max_msgs = cfg.get('context_max_messages', 10)
+        since = datetime.now(timezone.utc) - timedelta(minutes=minutes)
+        from app.models.telegram_message import TelegramMessage
+        msgs = (
+            TelegramMessage.query
+            .filter(TelegramMessage.chat_id == chat_id)
+            .filter(TelegramMessage.created_at >= since)
+            .order_by(TelegramMessage.created_at.desc())
+            .limit(max_msgs)
+            .all()
+        )
+        if not msgs:
+            return ''
+        lines = ['--- Vorherige Nachrichten in diesem Chat ---']
+        for m in reversed(msgs):
+            direction = 'Du' if m.direction == 'incoming' else 'Bot'
+            ts = m.created_at.strftime('%H:%M') if m.created_at else ''
+            lines.append(f'[{ts}] {direction}: {m.text[:500]}')
+        return '\n'.join(lines)
+    except Exception as e:
+        logger.warning('build_telegram_context error: %s', e)
+        return ''
+
+
+# ---------------------------------------------------------------------------
 # AI helper (inline, identisch zu ai.py _get_ai_reply)
 # ---------------------------------------------------------------------------
 
-def _ai_reply(message: str) -> str:
+def _ai_reply(message: str, chat_id: str = None) -> str:
     from app.routes.settings import load_ai_config
     cfg = load_ai_config()
     provider = cfg.get('provider', 'ollama')
@@ -153,6 +203,11 @@ def _ai_reply(message: str) -> str:
         'Du bist ein hilfreicher Projektmanagement-Assistent. '
         'Antworte kurz und auf Deutsch. Kein JSON, nur Fließtext.'
     )
+    # Chat-Kontext aus letzten Nachrichten hinzufügen
+    if chat_id:
+        context_text = _build_telegram_context(chat_id)
+        if context_text:
+            system += '\n\n' + context_text
     messages = [
         {'role': 'system', 'content': system},
         {'role': 'user', 'content': message},
@@ -341,7 +396,7 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
             f'  #{i.id} [{i.status}][{i.priority}] {i.title}' for i in issues
         ) if issues else 'Keine offenen Issues.'
         full_message = f'{context}\n\nFrage: {frage}'
-        reply = _ai_reply(full_message)
+        reply = _ai_reply(full_message, chat_id)
         _send(token, chat_id, f'🤖 {reply}')
     except Exception as e:
         logger.error('Telegram /ki Fehler: %s', e)
@@ -358,6 +413,8 @@ def _handle(msg: dict, token: str, chat_id: str) -> None:
     text = (msg.get('text') or '').strip()
     if not text:
         return
+    # Log incoming message for KI context
+    _log_telegram_message(chat_id, text, 'incoming')
     if text.startswith('/hilfe') or text == '/start':
         _cmd_hilfe(token, chat_id)
     elif text.startswith('/issue '):
@@ -424,7 +481,7 @@ def _flush_loop() -> None:
         combined = '\n\n'.join(msgs)
         count = len(msgs)
         header = f'📬 <b>{count} Benachrichtigung{"en" if count > 1 else ""}</b>\n\n'
-        _send(token, chat_id, header + combined)
+        _send(token, chat_id, header + combined, log_outgoing=False)
 
 
 # ---------------------------------------------------------------------------
