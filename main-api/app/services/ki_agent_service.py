@@ -99,23 +99,109 @@ def _build_context(agent, memory_content=''):
     return '\n\n'.join(parts)
 
 
+def _is_verifiable_action(action_type):
+    """Gibt True zurück wenn diese Aktion verifizierbar ist."""
+    return action_type in (
+        'create_issue', 'update_issue', 'add_comment',
+        'set_assignee', 'set_due_date', 'add_worklog',
+        'create_wiki_page', 'update_wiki_page',
+        'create_milestone', 'update_milestone',
+        'create_tag', 'create_subtask',
+        'assign_milestone', 'set_dependency',
+        'create_python_script',
+    )
+
+
 def _verify_action(action, result):
-    """Liest das betroffene Issue zurück und gibt einen Verifikations-String zurück."""
+    """Prüft ob eine Aktion erfolgreich war. Gibt {'ok': bool, 'detail': str} zurück."""
     from app.models.issue import Issue
+    from app.models.wiki_page import WikiPage
+    from app.models.milestone import Milestone
+    from app.models.tag import Tag
+
     action_type = action.get('type')
-    if action_type not in ('update_issue', 'set_assignee', 'set_due_date', 'add_comment', 'create_issue'):
-        return None
-    issue_id = (result or {}).get('issue_id') or action.get('issue_id')
-    if not issue_id:
-        return None
-    issue = Issue.query.get(issue_id)
-    if not issue:
-        return 'Issue nicht mehr vorhanden.'
-    due = issue.due_date.isoformat() if issue.due_date else 'nicht gesetzt'
-    return (f'Verifikation Issue #{issue.id}: '
-            f'Titel="{issue.title}" Status={issue.status} '
-            f'Priorität={issue.priority} Typ={issue.type} '
-            f'Fälligkeitsdatum={due}')
+    action_data = action.get('data') or {}
+    result = result or {}
+
+    # create_issue → Issue muss in DB existieren
+    if action_type == 'create_issue':
+        title = action_data.get('title', '').strip()
+        issue = Issue.query.filter(
+            Issue.project_id == action.get('project_id') or 0,
+            Issue.title == title
+        ).order_by(Issue.created_at.desc()).first()
+        if issue:
+            return {'ok': True, 'detail': f'Issue #{issue.id} "{issue.title}" existiert.'}
+        return {'ok': False, 'detail': f'Issue "{title}" wurde nicht gefunden.'}
+
+    # update_issue / set_assignee / set_due_date / add_worklog / add_comment
+    if action_type in ('update_issue', 'set_assignee', 'set_due_date', 'add_comment', 'add_worklog', 'create_subtask', 'assign_milestone', 'set_dependency'):
+        issue_id = result.get('issue_id') or action.get('issue_id')
+        if not issue_id:
+            return {'ok': False, 'detail': 'Keine Issue-ID für Verifikation.'}
+        issue = Issue.query.get(issue_id)
+        if not issue:
+            return {'ok': False, 'detail': f'Issue #{issue_id} nicht mehr vorhanden.'}
+        checks = []
+        if action_type == 'update_issue':
+            if 'status' in action_data and issue.status != action_data['status']:
+                checks.append(f'Status={issue.status} (erwartet={action_data["status"]})')
+            if 'priority' in action_data and issue.priority != action_data['priority']:
+                checks.append(f'Priorität={issue.priority} (erwartet={action_data["priority"]})')
+            if 'title' in action_data and issue.title != action_data['title']:
+                checks.append(f'Titel="{issue.title}" (erwartet="{action_data["title"]}")')
+        if checks:
+            return {'ok': False, 'detail': f'Issue #{issue.id} stimmt nicht überein: {", ".join(checks)}'}
+        return {'ok': True, 'detail': f'Issue #{issue.id} stimmt überein.'}
+
+    # create_wiki_page → Wiki-Seite muss existieren
+    if action_type == 'create_wiki_page':
+        slug = result.get('slug') or action_data.get('slug')
+        if not slug:
+            return {'ok': False, 'detail': 'Kein Slug für Verifikation.'}
+        page = WikiPage.query.filter_by(slug=slug).first()
+        if page:
+            return {'ok': True, 'detail': f'Wiki-Seite "{slug}" existiert.'}
+        return {'ok': False, 'detail': f'Wiki-Seite "{slug}" nicht gefunden.'}
+
+    # update_wiki_page → Content muss übereinstimmen
+    if action_type == 'update_wiki_page':
+        slug = action_data.get('slug') or (result.get('slug') if isinstance(result.get('slug'), str) else None)
+        if not slug:
+            return {'ok': False, 'detail': 'Kein Slug für Verifikation.'}
+        page = WikiPage.query.filter_by(slug=slug).first()
+        if not page:
+            return {'ok': False, 'detail': f'Wiki-Seite "{slug}" nicht mehr vorhanden.'}
+        if 'content' in action_data and page.content != action_data['content']:
+            return {'ok': False, 'detail': f'Wiki-Seite "{slug}" Content stimmt nicht überein.'}
+        return {'ok': True, 'detail': f'Wiki-Seite "{slug}" stimmt überein.'}
+
+    # create_milestone → Meilenstein muss existieren
+    if action_type == 'create_milestone':
+        name = action_data.get('name', '').strip()
+        ms = Milestone.query.filter_by(name=name).order_by(Milestone.id.desc()).first()
+        if ms:
+            return {'ok': True, 'detail': f'Meilenstein #{ms.id} "{ms.name}" existiert.'}
+        return {'ok': False, 'detail': f'Meilenstein "{name}" nicht gefunden.'}
+
+    # create_tag
+    if action_type == 'create_tag':
+        name = action_data.get('name', '').strip()
+        tag = Tag.query.filter_by(name=name).first()
+        if tag:
+            return {'ok': True, 'detail': f'Tag "#{tag.id}" "{tag.name}" existiert.'}
+        return {'ok': False, 'detail': f'Tag "{name}" nicht gefunden.'}
+
+    # create_python_script → Script muss existieren
+    if action_type == 'create_python_script':
+        from app.models.python_script import PythonScript
+        name = action_data.get('name', '').strip()
+        script = PythonScript.query.filter_by(name=name).order_by(PythonScript.id.desc()).first()
+        if script:
+            return {'ok': True, 'detail': f'Script #{script.id} "{script.name}" existiert.'}
+        return {'ok': False, 'detail': f'Script "{name}" nicht gefunden.'}
+
+    return None
 
 
 def _get_agent_ai_reply(messages, agent, return_usage=False):
@@ -264,35 +350,78 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                 actions_log.append({'type': action_type, 'simulated': True})
                 output_parts.append(f'\n[SIMULATION] Aktion würde ausgeführt: `{action_type}`')
                 break
+
+            # Aktion ausführen
+            action_data = action.get('data') or {}
+            if action_type == 'create_file':
+                result = _execute_file_action(action_data, exec_context)
+            elif action_type == 'trigger_agent':
+                result = _execute_trigger_agent_action(action_data, exec_context)
             else:
-                action_data = action.get('data') or {}
-                if action_type == 'create_file':
-                    result = _execute_file_action(action_data, exec_context)
-                elif action_type == 'trigger_agent':
-                    result = _execute_trigger_agent_action(action_data, exec_context)
+                result = _execute_action(action, agent_id, exec_context)
+
+            # Verifikation + Retry-Loop
+            verify_result = None
+            if _is_verifiable_action(action_type):
+                retry_count = 0
+                verified = False
+                while retry_count <= agent.retry_max and not verified:
+                    if retry_count > 0:
+                        # Warten vor Retry
+                        wait_min = agent.retry_delay_min or 1
+                        import time as _time
+                        _time.sleep(wait_min * 60)
+                        output_parts.append(f'\n[RETRY] Versuch {retry_count}/{agent.retry_max} für `{action_type}`')
+                    verify_result = _verify_action(action, result)
+                    verified = verify_result.get('ok', False) if verify_result else True
+                    if not verified:
+                        retry_count += 1
+                        # Nochmal ausführen
+                        if action_type == 'create_file':
+                            result = _execute_file_action(action_data, exec_context)
+                        elif action_type == 'trigger_agent':
+                            result = _execute_trigger_agent_action(action_data, exec_context)
+                        else:
+                            result = _execute_action(action, agent_id, exec_context)
+                    else:
+                        break
+                if not verified:
+                    actions_log.append({
+                        'type': action_type,
+                        'result': result,
+                        'verified': False,
+                        'retries': retry_count,
+                        'error': verify_result.get('detail') if verify_result else 'Verifikation fehlgeschlagen',
+                    })
+                    output_parts.append(f'\n❌ Aktion `{action_type}` nach {retry_count} Versuchen nicht verifiziert: {verify_result.get("detail") if verify_result else "?"}')
                 else:
-                    result = _execute_action(action, agent_id, exec_context)
-
+                    actions_log.append({
+                        'type': action_type,
+                        'result': result,
+                        'verified': True,
+                        'retries': retry_count,
+                    })
+                    output_parts.append(f'\n✅ Aktion `{action_type}` verifiziert (nach {retry_count} Versuchen).')
+            else:
                 if result:
-                    actions_log.append(result)
-                    output_parts.append(f'\nAktion ausgeführt: `{action_type}` → {json.dumps(result, ensure_ascii=False)}')
+                    actions_log.append({'type': action_type, 'result': result})
 
-                # Folgeantwort holen
-                messages.append({'role': 'assistant', 'content': raw})
-                follow_msg = f'Aktion abgeschlossen: {json.dumps(result, ensure_ascii=False)}.'
-                verify = _verify_action(action, result)
-                if verify:
-                    follow_msg += f' {verify}'
-                follow_msg += ' Gibt es weitere Aktionen?'
-                messages.append({'role': 'user', 'content': follow_msg})
-                try:
-                    raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
-                    total_tokens_in += t_in
-                    total_tokens_out += t_out
-                    ai_resp = json.loads(raw)
-                except Exception:
-                    break
-                action = ai_resp.get('action')
+            if result:
+                output_parts.append(f'\nAktion ausgeführt: `{action_type}` → {json.dumps(result, ensure_ascii=False)}')
+
+            # Folgeantwort holen
+            messages.append({'role': 'assistant', 'content': raw})
+            verify_text = f' Verifiziert: {verify_result.get("detail")}' if verify_result and isinstance(verify_result, dict) else ''
+            follow_msg = f'Aktion abgeschlossen{verify_text}. Gibt es weitere Aktionen?'
+            messages.append({'role': 'user', 'content': follow_msg})
+            try:
+                raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
+                total_tokens_in += t_in
+                total_tokens_out += t_out
+                ai_resp = json.loads(raw)
+            except Exception:
+                break
+            action = ai_resp.get('action')
 
         final_output = '\n'.join(output_parts)
 
