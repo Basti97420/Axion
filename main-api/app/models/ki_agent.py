@@ -13,6 +13,7 @@ class KiAgent(db.Model):
     api_url       = db.Column(db.String(500), default='')   # Ollama-Host, leer = global default
     api_model     = db.Column(db.String(100), default='')
     api_key       = db.Column(db.String(500), default='')
+    role          = db.Column(db.String(20), default='maker')  # 'reporter' | 'maker' | 'admin'
     schedule_type = db.Column(db.String(20), default='manual')  # 'manual' | 'interval'
     interval_min  = db.Column(db.Integer, default=60)
     website_url   = db.Column(db.String(500), default='')
@@ -40,6 +41,7 @@ class KiAgent(db.Model):
             'api_url':       self.api_url,
             'api_model':     self.api_model,
             'api_key':       '***' if self.api_key else '',
+            'role':          self.role,
             'schedule_type': self.schedule_type,
             'interval_min':  self.interval_min,
             'website_url':   self.website_url,
@@ -70,6 +72,7 @@ class KiAgentRun(db.Model):
     triggered_by = db.Column(db.String(20), default='manual')  # 'manual' | 'scheduler'
     tokens_in    = db.Column(db.Integer, default=0)  # Anzahl Input-Tokens (Prompt)
     tokens_out   = db.Column(db.Integer, default=0)  # Anzahl Output-Tokens (Antwort)
+    pending_confirmation = db.Column(db.String(50), nullable=True)  # Aktions-Typ der auf Bestätigung wartet
 
     def to_dict(self):
         return {
@@ -83,4 +86,5 @@ class KiAgentRun(db.Model):
             'triggered_by': self.triggered_by,
             'tokens_in':    self.tokens_in  or 0,
             'tokens_out':   self.tokens_out or 0,
+            'pending_confirmation': self.pending_confirmation,
         }

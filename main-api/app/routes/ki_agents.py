@@ -41,6 +41,7 @@ def create_agent(project_id):
         retry_on_error=data.get('retry_on_error', False),
         retry_max=int(data.get('retry_max') or 3),
         retry_delay_min=int(data.get('retry_delay_min') or 5),
+        role=data.get('role', 'maker'),
     )
     db.session.add(agent)
     db.session.commit()
@@ -61,7 +62,7 @@ def update_agent(agent_id):
     data = request.get_json() or {}
     for field in ('name', 'api_provider', 'api_url', 'api_model', 'website_url',
                   'schedule_type', 'is_active', 'dry_run', 'notify_telegram',
-                  'retry_on_error', 'retry_max', 'retry_delay_min'):
+                  'retry_on_error', 'retry_max', 'retry_delay_min', 'role'):
         if field in data:
             setattr(agent, field, data[field])
     if 'interval_min' in data:
@@ -192,3 +193,36 @@ def save_prompt(agent_id):
         return jsonify({'ok': True})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+# Human-in-the-Loop: Telegram-Bot pollt damit
+@bp.get('/api/ki-agents/<int:agent_id>/pending-confirmation')
+def get_pending_confirmation(agent_id):
+    """Gibt den aktuellen pending_confirmation-Status zurück."""
+    agent = db.get_or_404(KiAgent, agent_id)
+    return jsonify({'pending_confirmation': agent.pending_confirmation or ''})
+
+
+# Human-in-the-Loop: Telegram-Bot ruft diese auf
+@bp.post('/api/ki-agents/<int:agent_id>/confirm')
+def confirm_pending(agent_id):
+    """Bestätigt eine ausstehende Aktion (vom Telegram-Bot aufgerufen)."""
+    agent = db.get_or_404(KiAgent, agent_id)
+    if not agent.pending_confirmation:
+        return jsonify({'ok': False, 'error': 'Keine ausstehende Bestätigung'})
+    confirmed_action = agent.pending_confirmation
+    agent.pending_confirmation = None
+    db.session.commit()
+    return jsonify({'ok': True, 'confirmed': confirmed_action})
+
+
+@bp.post('/api/ki-agents/<int:agent_id>/deny')
+def deny_pending(agent_id):
+    """Verweigert eine ausstehende Aktion (vom Telegram-Bot aufgerufen)."""
+    agent = db.get_or_404(KiAgent, agent_id)
+    if not agent.pending_confirmation:
+        return jsonify({'ok': False, 'error': 'Keine ausstehende Bestätigung'})
+    denied_action = agent.pending_confirmation
+    agent.pending_confirmation = None
+    db.session.commit()
+    return jsonify({'ok': True, 'denied': denied_action})

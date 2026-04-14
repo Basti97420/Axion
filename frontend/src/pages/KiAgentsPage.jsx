@@ -35,6 +35,7 @@ function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate })
     retry_on_error: agent?.retry_on_error ?? false,
     retry_max: agent?.retry_max ?? 3,
     retry_delay_min: agent?.retry_delay_min ?? 5,
+    role: agent?.role ?? 'maker',
   })
 
   const DAY_LABELS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
@@ -138,6 +139,18 @@ function AgentForm({ agent, onSave, onDelete, onRun, running, onApplyTemplate })
 
       {/* Optionen */}
       <div className="space-y-2">
+        <div>
+          <label className={LABEL_CLASSES}>Rolle</label>
+          <select
+            value={form.role || 'maker'}
+            onChange={(e) => set('role', e.target.value)}
+            className={FIELD_CLASSES}
+          >
+            <option value="reporter">📊 Reporter — Nur Lese-Aktionen</option>
+            <option value="maker">🔧 Maker — Lese- + Schreib-Aktionen</option>
+            <option value="admin">🛡 Admin — Alle Aktionen inkl. Scripts</option>
+          </select>
+        </div>
         <label className="flex items-center gap-2 cursor-pointer">
           <input type="checkbox" checked={form.dry_run} onChange={(e) => set('dry_run', e.target.checked)} className="rounded" />
           <span className="text-sm text-gray-700">Nur simulieren (Dry-Run) — Aktionen werden nicht ausgeführt</span>
@@ -707,6 +720,8 @@ export default function KiAgentsPage() {
                   <span className="text-sm font-medium text-gray-800 truncate">{agent.name}</span>
                   {agent.dry_run && <span className="text-xs text-orange-500 shrink-0">sim</span>}
                   {agent.retry_on_error && <span className="text-xs text-blue-400 shrink-0">🔄</span>}
+                  {agent.role === 'reporter' && <span className="text-xs text-green-600 shrink-0">📊</span>}
+                  {agent.role === 'admin' && <span className="text-xs text-purple-600 shrink-0">🛡</span>}
                 </div>
                 <div className="text-xs text-gray-400 mt-0.5 pl-4">
                   {agent.last_run_at ? formatDateTime(agent.last_run_at) : 'Noch nicht ausgeführt'}

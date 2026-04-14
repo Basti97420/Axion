@@ -46,6 +46,8 @@ BOT_COMMANDS = [
     ('status', 'Projektstatistik anzeigen'),
     ('ki',     'KI-Assistent fragen: /ki Was sind offene Bugs?'),
     ('hilfe',  'Alle Befehle anzeigen'),
+    ('confirm', 'Agent-Aktion bestätigen: /confirm AgentID'),
+    ('deny',   'Agent-Aktion ablehnen: /deny AgentID'),
 ]
 
 
@@ -246,6 +248,8 @@ def _cmd_hilfe(token: str, chat_id: str) -> None:
         '/suche &lt;Begriff&gt; – Issues durchsuchen\n'
         '/status – Projektstatistik\n'
         '/ki &lt;Frage&gt; – KI-Assistent fragen\n'
+        '/confirm &lt;AgentID&gt; – Agent-Aktion bestätigen\n'
+        '/deny &lt;AgentID&gt; – Agent-Aktion ablehnen\n'
         '/hilfe – Diese Hilfe anzeigen\n\n'
         '💡 Oder einfach eine Frage schreiben – die KI antwortet direkt.'
     )
@@ -406,6 +410,48 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Human-in-the-Loop command handlers
+# ---------------------------------------------------------------------------
+
+def _cmd_agent_confirm(token: str, chat_id: str, arg: str) -> None:
+    arg = arg.strip()
+    if not arg.isdigit():
+        _send(token, chat_id, '⚠ Bitte eine Agent-ID angeben: /confirm 3')
+        return
+    try:
+        import requests as http
+        resp = http.post(
+            f'http://localhost:5050/api/ki-agents/{arg}/confirm',
+            timeout=10,
+        )
+        if resp.ok and resp.json().get('ok'):
+            _send(token, chat_id, f'✅ Aktion bestätigt für Agent #{arg}.')
+        else:
+            _send(token, chat_id, f'⚠ Keine ausstehende Aktion für Agent #{arg} oder bereits abgeschlossen.')
+    except Exception as e:
+        _send(token, chat_id, f'❌ Fehler: {e}')
+
+
+def _cmd_agent_deny(token: str, chat_id: str, arg: str) -> None:
+    arg = arg.strip()
+    if not arg.isdigit():
+        _send(token, chat_id, '⚠ Bitte eine Agent-ID angeben: /deny 3')
+        return
+    try:
+        import requests as http
+        resp = http.post(
+            f'http://localhost:5050/api/ki-agents/{arg}/deny',
+            timeout=10,
+        )
+        if resp.ok and resp.json().get('ok'):
+            _send(token, chat_id, f'🚫 Aktion abgelehnt für Agent #{arg}.')
+        else:
+            _send(token, chat_id, f'⚠ Keine ausstehende Aktion für Agent #{arg} oder bereits abgeschlossen.')
+    except Exception as e:
+        _send(token, chat_id, f'❌ Fehler: {e}')
+
+
+# ---------------------------------------------------------------------------
 # Message dispatcher
 # ---------------------------------------------------------------------------
 
@@ -441,6 +487,10 @@ def _handle(msg: dict, token: str, chat_id: str) -> None:
         _cmd_ki(token, chat_id, text[4:])
     elif text == '/ki':
         _send(token, chat_id, '⚠ Bitte eine Frage angeben: /ki Was sind offene Bugs?')
+    elif text.startswith('/confirm '):
+        _cmd_agent_confirm(token, chat_id, text[9:].strip())
+    elif text.startswith('/deny '):
+        _cmd_agent_deny(token, chat_id, text[6:].strip())
     elif not text.startswith('/'):
         _cmd_ki(token, chat_id, text)
     else:

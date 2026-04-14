@@ -99,6 +99,30 @@ def _build_context(agent, memory_content=''):
     return '\n\n'.join(parts)
 
 
+def _save_checkpoint(agent, workspace_dir, step, action_type, result, verified, retry_count, output_parts):
+    """Schreibt Checkpoint-Info nach memory.md (am Ende jeder Aktion)."""
+    try:
+        from datetime import datetime
+        memory_md_path = os.path.join(workspace_dir, 'memory.md')
+        # Bisherigen Inhalt lesen
+        existing = ''
+        if os.path.exists(memory_md_path):
+            with open(memory_md_path, 'r', encoding='utf-8') as f:
+                existing = f.read()
+        # Checkpoint-Eintrag
+        status = '✅' if verified else ('🔄' if retry_count > 0 else '❌')
+        ts = datetime.utcnow().strftime('%Y-%m-%d %H:%M')
+        line = f'\n- [{ts}] {status} {action_type}: {result} (Retries: {retry_count})'
+        # An "Aktionen"-Sektion anfügen oder neu erstellen
+        if '## Letzte Aktionen' in existing:
+            existing = existing.split('## Letzte Aktionen')[0]
+        checkpoint = f'## Letzte Aktionen{line}\n'
+        with open(memory_md_path, 'w', encoding='utf-8') as f:
+            f.write(existing.rstrip() + '\n' + checkpoint)
+    except Exception:
+        pass
+
+
 def _is_verifiable_action(action_type):
     """Gibt True zurück wenn diese Aktion verifizierbar ist."""
     return action_type in (
@@ -110,6 +134,108 @@ def _is_verifiable_action(action_type):
         'assign_milestone', 'set_dependency',
         'create_python_script',
     )
+
+
+# Rollen-basierte Aktionsfilter
+READ_ACTIONS = {
+    'search_issues', 'read_wiki_page', 'search_wiki', 'list_wiki_pages',
+    'list_projects', 'search', 'read_issue',
+}
+WRITE_ACTIONS = {
+    'create_issue', 'update_issue', 'add_comment',
+    'create_wiki_page', 'update_wiki_page',
+    'create_milestone', 'update_milestone',
+    'add_tag', 'remove_tag', 'create_tag',
+    'create_subtask', 'assign_milestone', 'set_dependency',
+    'add_worklog', 'create_milestone',
+}
+ADMIN_ACTIONS = {
+    'create_python_script', 'run_python_script',
+    'create_ki_agent', 'trigger_agent', 'create_file',
+}
+
+
+def _is_action_allowed(agent, action_type):
+    """Prüft ob die Aktion für die Rolle des Agenten erlaubt ist."""
+    role = getattr(agent, 'role', None) or 'maker'
+    if role == 'admin':
+        return True
+    if role == 'reporter':
+        return action_type in READ_ACTIONS
+    if role == 'maker':
+        return action_type in WRITE_ACTIONS or action_type in READ_ACTIONS
+    return True
+
+
+DEPENDENCY_GRAPH = {
+    'create_issue': [],
+    'update_issue': [],
+    'add_comment': [],
+    'set_assignee': [],
+    'set_due_date': [],
+    'add_worklog': [],
+    'create_wiki_page': [],
+    'update_wiki_page': [],
+    'create_milestone': [],
+    'update_milestone': [],
+    'add_tag': [],
+    'create_subtask': [],
+    'assign_milestone': [],
+    'set_dependency': [],
+    'create_tag': [],
+    'create_python_script': [],
+}
+
+
+def _execute_single_action(action_type, action_data, issue_id, agent, agent_id, exec_context):
+    """Führt eine einzelne Aktion aus und gibt (result, error) zurück."""
+    try:
+        from app.routes.ai import _execute_action, _execute_file_action, _execute_trigger_agent_action
+        if action_type == 'create_file':
+            return _execute_file_action(action_data, exec_context), None
+        elif action_type == 'trigger_agent':
+            return _execute_trigger_agent_action(action_data, exec_context), None
+        else:
+            return _execute_action({'type': action_type, 'data': action_data, 'issue_id': issue_id}, agent_id, exec_context), None
+    except Exception as e:
+        return None, str(e)
+
+
+def _run_action_with_retry(action, agent, agent_id, exec_context):
+    """Führt eine Aktion mit Verifikation + Retry aus. Gibt (result, verified, retries, error) zurück."""
+    action_type = action.get('type')
+    action_data = action.get('data') or {}
+    issue_id = action.get('issue_id')
+
+    result, err = _execute_single_action(action_type, action_data, issue_id, agent, agent_id, exec_context)
+    if err:
+        return result, False, 0, err
+
+    if not _is_verifiable_action(action_type):
+        return result, True, 0, None
+
+    retry_count = 0
+    verified = False
+    while retry_count <= agent.retry_max and not verified:
+        if retry_count > 0:
+            base = agent.retry_delay_min or 1
+            wait_min = min(base * (2 ** (retry_count - 1)), 15)
+            import time as _time
+            _time.sleep(wait_min * 60)
+        verify_result = _verify_action(action, result)
+        verified = verify_result.get('ok', False) if verify_result else True
+        if not verified:
+            retry_count += 1
+            result, err = _execute_single_action(action_type, action_data, issue_id, agent, agent_id, exec_context)
+            if err:
+                return result, False, retry_count, err
+        else:
+            break
+
+    if not verified:
+        detail = verify_result.get('detail') if verify_result else 'Verifikation fehlgeschlagen'
+        return result, False, retry_count, detail
+    return result, True, retry_count, None
 
 
 def _verify_action(action, result):
@@ -317,8 +443,18 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
             except Exception:
                 pass
 
+        # Rolle in den Kontext einbauen
+        role = getattr(agent, 'role', None) or 'maker'
+        role_info = ''
+        if role == 'reporter':
+            role_info = '\n\n🚨 Du hast die Rolle "Reporter" — du darfst nur LESE-Aktionen ausführen (search_issues, read_wiki_page, search_wiki, list_wiki_pages, list_projects, search, read_issue). Keine Erstellungs- oder Änderungsaktionen!'
+        elif role == 'maker':
+            role_info = '\n\n🔧 Du hast die Rolle "Maker" — LESE- und SCHREIB-Aktionen erlaubt. Keine Script-Ausführungen oder Agent-Ketten.'
+        elif role == 'admin':
+            role_info = '\n\n🛡 Du hast die Rolle "Admin" — alle Aktionen erlaubt.'
+
         context_str = _build_context(agent, memory_content=memory_content)
-        system_content = AGENT_SYSTEM_PROMPT + "\n\n# Dein Auftrag\n" + agent_prompt
+        system_content = AGENT_SYSTEM_PROMPT + role_info + "\n\n# Dein Auftrag\n" + agent_prompt
         messages = [
             {'role': 'system', 'content': system_content},
             {'role': 'user', 'content': context_str},
@@ -346,74 +482,67 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
             if not action_type or action_type == 'none':
                 break
 
+            # Rolle prüfen
+            if not _is_action_allowed(agent, action_type):
+                output_parts.append(f'\n⛔ Aktion `{action_type}` ist für Rolle "{agent.role}" nicht erlaubt.')
+                action = None
+                continue
+
             if agent.dry_run:
                 actions_log.append({'type': action_type, 'simulated': True})
                 output_parts.append(f'\n[SIMULATION] Aktion würde ausgeführt: `{action_type}`')
                 break
 
-            # Aktion ausführen
-            action_data = action.get('data') or {}
-            if action_type == 'create_file':
-                result = _execute_file_action(action_data, exec_context)
-            elif action_type == 'trigger_agent':
-                result = _execute_trigger_agent_action(action_data, exec_context)
-            else:
-                result = _execute_action(action, agent_id, exec_context)
-
-            # Verifikation + Retry-Loop
-            verify_result = None
-            if _is_verifiable_action(action_type):
-                retry_count = 0
-                verified = False
-                while retry_count <= agent.retry_max and not verified:
-                    if retry_count > 0:
-                        # Warten vor Retry
-                        wait_min = agent.retry_delay_min or 1
-                        import time as _time
-                        _time.sleep(wait_min * 60)
-                        output_parts.append(f'\n[RETRY] Versuch {retry_count}/{agent.retry_max} für `{action_type}`')
-                    verify_result = _verify_action(action, result)
-                    verified = verify_result.get('ok', False) if verify_result else True
-                    if not verified:
-                        retry_count += 1
-                        # Nochmal ausführen
-                        if action_type == 'create_file':
-                            result = _execute_file_action(action_data, exec_context)
-                        elif action_type == 'trigger_agent':
-                            result = _execute_trigger_agent_action(action_data, exec_context)
-                        else:
-                            result = _execute_action(action, agent_id, exec_context)
-                    else:
+            # Human-in-the-Loop
+            if action.get('await_human') and agent.notify_telegram:
+                agent.pending_confirmation = action_type
+                db.session.commit()
+                try:
+                    from app.services import telegram_bot as tg
+                    tg.notify(
+                        f'🤖 Agent „{agent.name}" wartet auf Bestätigung:\n\n'
+                        f'🔔 <b>{action_type}</b>\n'
+                        f'Details: {json.dumps(action.get("data") or {}, ensure_ascii=False)}\n\n'
+                        f'Bestätigen: /confirm_{agent.id}\n'
+                        f'Ablehnen: /deny_{agent.id}'
+                    )
+                except Exception:
+                    pass
+                output_parts.append(f'\n⏳ Aktion `{action_type}` wartet auf menschliche Bestätigung...')
+                import time as _time
+                for _ in range(60):
+                    _time.sleep(5)
+                    db.session.refresh(agent)
+                    if not agent.pending_confirmation:
                         break
-                if not verified:
-                    actions_log.append({
-                        'type': action_type,
-                        'result': result,
-                        'verified': False,
-                        'retries': retry_count,
-                        'error': verify_result.get('detail') if verify_result else 'Verifikation fehlgeschlagen',
-                    })
-                    output_parts.append(f'\n❌ Aktion `{action_type}` nach {retry_count} Versuchen nicht verifiziert: {verify_result.get("detail") if verify_result else "?"}')
-                else:
-                    actions_log.append({
-                        'type': action_type,
-                        'result': result,
-                        'verified': True,
-                        'retries': retry_count,
-                    })
-                    output_parts.append(f'\n✅ Aktion `{action_type}` verifiziert (nach {retry_count} Versuchen).')
+                if agent.pending_confirmation:
+                    output_parts.append(f'\n⏰ Timeout bei Bestätigung für `{action_type}` — übersprungen.')
+                    actions_log.append({'type': action_type, 'result': None, 'error': 'Timeout'})
+                    agent.pending_confirmation = None
+                    db.session.commit()
+                    action = None
+                    continue
+                output_parts.append(f'\n✅ Bestätigung erhalten für `{action_type}` — wird ausgeführt.')
+
+            # Aktion mit Retry ausführen
+            result, verified, retries, err = _run_action_with_retry(action, agent, agent_id, exec_context)
+            if err:
+                actions_log.append({'type': action_type, 'result': result, 'verified': False, 'retries': retries, 'error': err})
+                output_parts.append(f'\n❌ Aktion `{action_type}` fehlgeschlagen: {err}')
+            elif not verified:
+                actions_log.append({'type': action_type, 'result': result, 'verified': False, 'retries': retries, 'error': 'Verifikation fehlgeschlagen'})
+                output_parts.append(f'\n❌ Aktion `{action_type}` nach {retries} Versuchen nicht verifiziert.')
             else:
-                if result:
-                    actions_log.append({'type': action_type, 'result': result})
+                actions_log.append({'type': action_type, 'result': result, 'verified': True, 'retries': retries})
+                output_parts.append(f'\n✅ `{action_type}` verifiziert (nach {retries} Versuchen).')
+            _save_checkpoint(agent, workspace_dir, len(actions_log), action_type, result, verified, retries, output_parts)
 
             if result:
                 output_parts.append(f'\nAktion ausgeführt: `{action_type}` → {json.dumps(result, ensure_ascii=False)}')
 
             # Folgeantwort holen
             messages.append({'role': 'assistant', 'content': raw})
-            verify_text = f' Verifiziert: {verify_result.get("detail")}' if verify_result and isinstance(verify_result, dict) else ''
-            follow_msg = f'Aktion abgeschlossen{verify_text}. Gibt es weitere Aktionen?'
-            messages.append({'role': 'user', 'content': follow_msg})
+            messages.append({'role': 'user', 'content': f'Aktion `{action_type}` abgeschlossen. Gibt es weitere Aktionen?'})
             try:
                 raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
                 total_tokens_in += t_in
