@@ -91,6 +91,13 @@ export default function UserSettingsPage() {
   const [icloudSaving, setIcloudSaving] = useState(false)
   const [icloudMessage, setIcloudMessage] = useState(null)
 
+  // Admin: Backup
+  const [backupForm, setBackupForm] = useState(null)
+  const [backupSaving, setBackupSaving] = useState(false)
+  const [backupMessage, setBackupMessage] = useState(null)
+  const [backupList, setBackupList] = useState([])
+  const [backupTriggering, setBackupTriggering] = useState(false)
+
   // Persönliche Einstellungen laden
   useEffect(() => {
     userSettingsApi.get()
@@ -109,6 +116,12 @@ export default function UserSettingsPage() {
       .catch(() => {})
     settingsApi.getIcloudConfig()
       .then(({ data }) => setIcloudForm(data))
+      .catch(() => {})
+    settingsApi.getBackupConfig()
+      .then(({ data }) => setBackupForm(data))
+      .catch(() => {})
+    settingsApi.listBackups()
+      .then(({ data }) => setBackupList(data))
       .catch(() => {})
     projectsApi.getAll()
       .then(({ data }) => setProjects(data))
@@ -139,6 +152,12 @@ export default function UserSettingsPage() {
     const t = setTimeout(() => setIcloudMessage(null), 5000)
     return () => clearTimeout(t)
   }, [icloudMessage])
+
+  useEffect(() => {
+    if (!backupMessage) return
+    const t = setTimeout(() => setBackupMessage(null), 5000)
+    return () => clearTimeout(t)
+  }, [backupMessage])
 
   // Persönliche Einstellungen speichern
   async function handleSave(e) {
@@ -201,10 +220,69 @@ export default function UserSettingsPage() {
     }
   }
 
+  // Admin: Backup speichern
+  async function handleBackupSave(e) {
+    e.preventDefault()
+    setBackupSaving(true)
+    try {
+      const { data } = await settingsApi.saveBackupConfig(backupForm)
+      setBackupForm(data)
+      setBackupMessage({ type: 'success', text: 'Backup-Einstellungen gespeichert.' })
+    } catch (err) {
+      setBackupMessage({ type: 'error', text: err.response?.data?.error || 'Fehler beim Speichern.' })
+    } finally {
+      setBackupSaving(false)
+    }
+  }
+
+  // Admin: Backup jetzt erstellen
+  async function handleBackupNow() {
+    setBackupTriggering(true)
+    try {
+      await settingsApi.triggerBackup()
+      const { data: cfg } = await settingsApi.getBackupConfig()
+      setBackupForm(cfg)
+      const { data: list } = await settingsApi.listBackups()
+      setBackupList(list)
+      setBackupMessage({ type: 'success', text: 'Backup erfolgreich erstellt.' })
+    } catch (err) {
+      setBackupMessage({ type: 'error', text: err.response?.data?.error || 'Fehler beim Backup.' })
+    } finally {
+      setBackupTriggering(false)
+    }
+  }
+
+  // Admin: Backup löschen
+  async function handleBackupDelete(filename) {
+    if (!window.confirm(`Backup "${filename}" wirklich löschen?`)) return
+    try {
+      await settingsApi.deleteBackup(filename)
+      setBackupList((l) => l.filter((b) => b.filename !== filename))
+    } catch (err) {
+      setBackupMessage({ type: 'error', text: err.response?.data?.error || 'Fehler beim Löschen.' })
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '–'
+    try {
+      return new Date(iso + 'Z').toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })
+    } catch {
+      return iso
+    }
+  }
+
   function set(key, value) { setForm((f) => ({ ...f, [key]: value })) }
   function setAi(key, value) { setAiForm((f) => ({ ...f, [key]: value })) }
   function setTg(key, value) { setTgForm((f) => ({ ...f, [key]: value })) }
   function setIcloud(key, value) { setIcloudForm((f) => ({ ...f, [key]: value })) }
+  function setBackup(key, value) { setBackupForm((f) => ({ ...f, [key]: value })) }
 
   const fieldClass = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white'
   const labelClass = 'block text-xs font-medium text-gray-700 mb-1'
@@ -519,6 +597,116 @@ export default function UserSettingsPage() {
                 </div>
                 <SaveRow saving={icloudSaving} message={icloudMessage} />
               </form>
+            )}
+          </section>
+
+          {/* Automatisches Backup */}
+          <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="px-5 py-4 border-b border-gray-100">
+              <h2 className="text-sm font-semibold text-gray-800">Automatisches Backup</h2>
+              <p className="text-xs text-gray-500 mt-0.5">Regelmäßige Sicherung der Datenbank und Wiki-Anhänge auf dem Server</p>
+            </div>
+            {!backupForm ? <div className="px-5 py-6 text-sm text-gray-400">Lädt…</div> : (
+              <div className="px-5 py-5 space-y-5">
+                <form onSubmit={handleBackupSave} className="space-y-4">
+                  {/* Toggle */}
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <div
+                      onClick={() => setBackup('enabled', !backupForm.enabled)}
+                      className={`relative w-10 h-6 rounded-full transition-colors ${backupForm.enabled ? 'bg-primary-600' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow transition-transform ${backupForm.enabled ? 'translate-x-4' : ''}`} />
+                    </div>
+                    <span className="text-sm text-gray-700">Automatisches Backup aktiv</span>
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>Intervall (Tage)</label>
+                      <input
+                        type="number" min="1" max="365"
+                        value={backupForm.interval_days}
+                        onChange={(e) => setBackup('interval_days', Math.max(1, parseInt(e.target.value) || 7))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                        disabled={!backupForm.enabled}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Max. gespeicherte Backups</label>
+                      <input
+                        type="number" min="1" max="20"
+                        value={backupForm.max_keep}
+                        onChange={(e) => setBackup('max_keep', Math.max(1, parseInt(e.target.value) || 5))}
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+                      />
+                    </div>
+                  </div>
+
+                  {backupForm.last_run && (
+                    <p className="text-xs text-gray-500">
+                      Letztes automatisches Backup: <span className="font-medium text-gray-700">{formatDate(backupForm.last_run)}</span>
+                    </p>
+                  )}
+
+                  <div className="flex items-center gap-3">
+                    <SaveRow saving={backupSaving} message={backupMessage} />
+                    <button
+                      type="button"
+                      onClick={handleBackupNow}
+                      disabled={backupTriggering}
+                      className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 border border-gray-300"
+                    >
+                      {backupTriggering ? 'Sichert…' : '💾 Jetzt sichern'}
+                    </button>
+                  </div>
+                </form>
+
+                {/* Backup-Liste */}
+                {backupList.length > 0 && (
+                  <div>
+                    <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">Gespeicherte Backups</h3>
+                    <div className="border border-gray-200 rounded-lg overflow-hidden">
+                      <table className="w-full text-xs">
+                        <thead className="bg-gray-50 border-b border-gray-200">
+                          <tr>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">Datum</th>
+                            <th className="text-left px-3 py-2 font-medium text-gray-600">Größe</th>
+                            <th className="px-3 py-2" />
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {backupList.map((b) => (
+                            <tr key={b.filename} className="hover:bg-gray-50">
+                              <td className="px-3 py-2 text-gray-700 font-mono">{formatDate(b.created_at)}</td>
+                              <td className="px-3 py-2 text-gray-500">{formatBytes(b.size_bytes)}</td>
+                              <td className="px-3 py-2 text-right space-x-2">
+                                <a
+                                  href={settingsApi.backupDownloadUrl(b.filename)}
+                                  download={b.filename}
+                                  className="text-primary-600 hover:underline"
+                                >
+                                  ↓ Download
+                                </a>
+                                <button
+                                  type="button"
+                                  onClick={() => handleBackupDelete(b.filename)}
+                                  className="text-red-500 hover:text-red-700"
+                                >
+                                  ✕
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                {backupList.length === 0 && (
+                  <p className="text-xs text-gray-400">Noch keine automatischen Backups vorhanden. Klicke „Jetzt sichern" für das erste Backup.</p>
+                )}
+              </div>
             )}
           </section>
         </div>

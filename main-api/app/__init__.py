@@ -104,6 +104,10 @@ def create_app():
     from .services import worklog_scheduler
     worklog_scheduler.start(app)
 
+    # Backup-Scheduler starten (automatische Datenbanksicherung)
+    from .services import backup_scheduler
+    backup_scheduler.start(app)
+
     # Python-Script-Token generieren falls noch nicht vorhanden
     with app.app_context():
         try:

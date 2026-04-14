@@ -3,9 +3,10 @@ import json
 import os
 import zipfile
 from datetime import datetime
+from functools import wraps
 
-from flask import Blueprint, send_file
-from flask_login import login_required
+from flask import Blueprint, send_file, jsonify, request, current_app
+from flask_login import login_required, current_user
 
 from app.models.user import User
 from app.models.project import Project
@@ -18,11 +19,19 @@ from app.models.activity import ActivityLog
 bp = Blueprint('backup', __name__, url_prefix='/api')
 
 
-@bp.get('/backup')
-@login_required
-def create_backup():
-    buf = io.BytesIO()
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated(*args, **kwargs):
+        if not current_user.is_admin:
+            return jsonify({'error': 'Keine Berechtigung'}), 403
+        return f(*args, **kwargs)
+    return decorated
 
+
+def _create_backup_bytes():
+    """Erstellt ein Backup-ZIP und gibt die Bytes zurück."""
+    buf = io.BytesIO()
     with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
         data = {
             'version': '1.0',
@@ -38,7 +47,6 @@ def create_backup():
             'wiki_attachments': [],
         }
 
-        # Wiki-Daten direkt aus der DB
         try:
             from app.models.wiki_page import WikiPage
             from app.models.wiki_attachment import WikiAttachment
@@ -64,11 +72,63 @@ def create_backup():
                             pass
             data['wiki_attachments'] = attachment_refs
         except Exception:
-            pass  # Wiki-Daten nicht verfügbar – Backup ohne Wiki
+            pass
 
         zf.writestr('backup.json', json.dumps(data, ensure_ascii=False, indent=2))
 
     buf.seek(0)
+    return buf.read()
+
+
+def _get_backup_dir():
+    """Gibt das Backup-Verzeichnis zurück und erstellt es falls nötig."""
+    backup_dir = os.path.join(current_app.instance_path, 'backups')
+    os.makedirs(backup_dir, exist_ok=True)
+    return backup_dir
+
+
+def _save_backup(app):
+    """Erstellt ein Backup und speichert es auf der Festplatte. Löscht überzählige alte Backups."""
+    from app.services.settings_env import read, write
+
+    with app.app_context():
+        backup_bytes = _create_backup_bytes()
+        backup_dir = _get_backup_dir()
+        timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+        filename = f'axion_backup_{timestamp}.zip'
+        filepath = os.path.join(backup_dir, filename)
+
+        with open(filepath, 'wb') as f:
+            f.write(backup_bytes)
+
+        # Letzten Lauf speichern
+        write('BACKUP_LAST_RUN', datetime.utcnow().isoformat())
+
+        # Alte Backups bereinigen
+        try:
+            max_keep = int(read('BACKUP_MAX_KEEP', '5'))
+        except (ValueError, TypeError):
+            max_keep = 5
+
+        backups = sorted([
+            f for f in os.listdir(backup_dir)
+            if f.startswith('axion_backup_') and f.endswith('.zip')
+        ])
+        while len(backups) > max_keep:
+            oldest = backups.pop(0)
+            try:
+                os.remove(os.path.join(backup_dir, oldest))
+            except Exception:
+                pass
+
+
+# ── Manueller Download (bestehend) ───────────────────────────────────────────
+
+@bp.get('/backup')
+@login_required
+def create_backup():
+    backup_bytes = _create_backup_bytes()
+    buf = io.BytesIO(backup_bytes)
     timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
     return send_file(
         buf,
@@ -76,6 +136,99 @@ def create_backup():
         as_attachment=True,
         download_name=f'planwiki_backup_{timestamp}.zip',
     )
+
+
+# ── Admin: Backup-Konfiguration ───────────────────────────────────────────────
+
+@bp.get('/admin/settings/backup')
+@admin_required
+def get_backup_config():
+    from app.services.settings_env import read
+    return jsonify({
+        'enabled':        read('BACKUP_ENABLED', 'true').lower() == 'true',
+        'interval_days':  int(read('BACKUP_INTERVAL_DAYS', '7') or '7'),
+        'max_keep':       int(read('BACKUP_MAX_KEEP', '5') or '5'),
+        'last_run':       read('BACKUP_LAST_RUN', ''),
+    })
+
+
+@bp.put('/admin/settings/backup')
+@admin_required
+def update_backup_config():
+    from app.services.settings_env import read, write
+    data = request.get_json() or {}
+    if 'enabled' in data:
+        write('BACKUP_ENABLED', 'true' if data['enabled'] else 'false')
+    if 'interval_days' in data:
+        write('BACKUP_INTERVAL_DAYS', str(max(1, int(data['interval_days']))))
+    if 'max_keep' in data:
+        write('BACKUP_MAX_KEEP', str(max(1, int(data['max_keep']))))
+    return jsonify({
+        'enabled':        read('BACKUP_ENABLED', 'true').lower() == 'true',
+        'interval_days':  int(read('BACKUP_INTERVAL_DAYS', '7') or '7'),
+        'max_keep':       int(read('BACKUP_MAX_KEEP', '5') or '5'),
+        'last_run':       read('BACKUP_LAST_RUN', ''),
+    })
+
+
+# ── Admin: Backup-Liste / Download / Löschen / Manuell ausführen ──────────────
+
+@bp.get('/admin/backups')
+@admin_required
+def list_backups():
+    backup_dir = _get_backup_dir()
+    files = sorted([
+        f for f in os.listdir(backup_dir)
+        if f.startswith('axion_backup_') and f.endswith('.zip')
+    ], reverse=True)
+    result = []
+    for filename in files:
+        filepath = os.path.join(backup_dir, filename)
+        try:
+            stat = os.stat(filepath)
+            result.append({
+                'filename': filename,
+                'size_bytes': stat.st_size,
+                'created_at': datetime.utcfromtimestamp(stat.st_mtime).isoformat(),
+            })
+        except Exception:
+            pass
+    return jsonify(result)
+
+
+@bp.post('/admin/backups/run')
+@admin_required
+def trigger_backup():
+    try:
+        _save_backup(current_app._get_current_object())
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@bp.get('/admin/backups/<filename>')
+@admin_required
+def download_backup(filename):
+    if not filename.startswith('axion_backup_') or not filename.endswith('.zip') or '/' in filename:
+        return jsonify({'error': 'Ungültiger Dateiname'}), 400
+    backup_dir = _get_backup_dir()
+    filepath = os.path.join(backup_dir, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'Datei nicht gefunden'}), 404
+    return send_file(filepath, mimetype='application/zip', as_attachment=True, download_name=filename)
+
+
+@bp.delete('/admin/backups/<filename>')
+@admin_required
+def delete_backup(filename):
+    if not filename.startswith('axion_backup_') or not filename.endswith('.zip') or '/' in filename:
+        return jsonify({'error': 'Ungültiger Dateiname'}), 400
+    backup_dir = _get_backup_dir()
+    filepath = os.path.join(backup_dir, filename)
+    if not os.path.exists(filepath):
+        return jsonify({'error': 'Datei nicht gefunden'}), 404
+    os.remove(filepath)
+    return jsonify({'ok': True})
 
 
 def _user_dict(u):
