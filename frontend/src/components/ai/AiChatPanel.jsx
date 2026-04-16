@@ -41,7 +41,11 @@ export default function AiChatPanel() {
         context: { project_id: projectId, issue_id: issueId, wiki_slug: wikiSlug },
         history,
       })
-      addMessage({ role: 'assistant', content: data.reply, action_result: data.action_result })
+      addMessage({
+        role: 'assistant',
+        content: data.reply,
+        action_results: data.action_results || (data.action_result ? [data.action_result] : []),
+      })
     } catch (err) {
       addMessage({
         role: 'assistant',
@@ -56,6 +60,24 @@ export default function AiChatPanel() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
       handleSend()
+    }
+  }
+
+  function actionResultLabel(r) {
+    if (!r) return ''
+    switch (r.type) {
+      case 'issue_updated':     return `✓ Issue #${r.issue_id} aktualisiert`
+      case 'comment_added':     return `✓ Kommentar zu Issue #${r.issue_id}`
+      case 'create_issue':      return `✓ Issue #${r.issue_id} erstellt: „${r.title}"`
+      case 'wiki_page_created': return `✓ Wiki-Seite „${r.title}" erstellt`
+      case 'wiki_page_updated': return `✓ Wiki-Seite „${r.title}" aktualisiert`
+      case 'worklog_added':     return `✓ ${r.hours}h auf Issue #${r.issue_id} erfasst`
+      case 'milestone_created': return `✓ Meilenstein „${r.name}" erstellt`
+      case 'dependency_set':    return `✓ Issue #${r.issue_id} blockiert #${r.blocks}`
+      case 'tag_added':         return `✓ Tag zu Issue #${r.issue_id} hinzugefügt`
+      case 'tag_removed':       return `✓ Tag von Issue #${r.issue_id} entfernt`
+      case 'read_done':         return `↻ Daten abgerufen (${r.action})`
+      default:                  return `✓ ${r.type}`
     }
   }
 
@@ -114,29 +136,21 @@ export default function AiChatPanel() {
                   : 'bg-gray-100 text-gray-800'
               }`}>
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
-                {msg.action_result && (
-                  <p className={`mt-1.5 text-xs ${msg.role === 'user' ? 'text-primary-200' : 'text-green-600'}`}>
-                    {msg.action_result.type === 'issue_updated' &&
-                      `✓ Issue #${msg.action_result.issue_id} aktualisiert`}
-                    {msg.action_result.type === 'comment_added' &&
-                      `✓ Kommentar zu Issue #${msg.action_result.issue_id} hinzugefügt`}
-                    {msg.action_result.type === 'create_issue' &&
-                      `✓ Issue #${msg.action_result.issue_id} erstellt: „${msg.action_result.title}"`}
-                    {msg.action_result.type === 'wiki_page_created' &&
-                      `✓ Wiki-Seite „${msg.action_result.title}" erstellt`}
-                    {msg.action_result.type === 'wiki_page_updated' &&
-                      `✓ Wiki-Seite „${msg.action_result.title}" aktualisiert`}
-                    {msg.action_result.type === 'worklog_added' &&
-                      `✓ ${msg.action_result.hours}h auf Issue #${msg.action_result.issue_id} erfasst`}
-                    {msg.action_result.type === 'milestone_created' &&
-                      `✓ Meilenstein „${msg.action_result.name}" erstellt`}
-                    {msg.action_result.type === 'dependency_set' &&
-                      `✓ Issue #${msg.action_result.issue_id} blockiert jetzt #${msg.action_result.blocks}`}
-                    {msg.action_result.type === 'tag_added' &&
-                      `✓ Tag zu Issue #${msg.action_result.issue_id} hinzugefügt`}
-                    {msg.action_result.type === 'tag_removed' &&
-                      `✓ Tag von Issue #${msg.action_result.issue_id} entfernt`}
-                  </p>
+                {msg.action_results && msg.action_results.length > 0 && (
+                  <div className="mt-2 space-y-0.5 border-t border-gray-200 pt-1.5">
+                    {msg.action_results.map((result, idx) => (
+                      <details key={idx} className="group text-xs">
+                        <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5">
+                          <span className="group-open:hidden text-[10px]">▶</span>
+                          <span className="hidden group-open:inline text-[10px]">▼</span>
+                          <span>{actionResultLabel(result)}</span>
+                        </summary>
+                        <pre className="mt-1 ml-4 text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
+                          {JSON.stringify(result, null, 2)}
+                        </pre>
+                      </details>
+                    ))}
+                  </div>
                 )}
               </div>
             </div>

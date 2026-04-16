@@ -929,4 +929,8 @@ def chat():
             # Letzte Antwort der KI als reply verwenden
             reply = ai_resp.get('reply') or reply
 
-    return jsonify({'reply': reply, 'action_result': all_results[-1] if all_results else action_result})
+    return jsonify({
+        'reply': reply,
+        'action_results': all_results,
+        'action_result': all_results[-1] if all_results else None,
+    })
