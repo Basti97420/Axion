@@ -29,11 +29,6 @@ const TIMEZONES = [
 const DEFAULT_FORM = {
   icloud_username: '',
   icloud_app_password: '',
-  ai_provider: '',
-  ollama_url: '',
-  ollama_model: '',
-  claude_api_key: '',
-  claude_model: 'claude-sonnet-4-6',
   timezone: '',
 }
 
@@ -354,62 +349,6 @@ export default function UserSettingsPage() {
               className={fieldClass}
             />
           </div>
-        </section>
-
-        {/* KI-Assistent (persönlich) */}
-        <section>
-          <h2 className="text-base font-semibold text-gray-800 mb-1 pb-2 border-b border-gray-200">
-            KI-Assistent <span className="text-xs font-normal text-gray-400 ml-1">persönlich</span>
-          </h2>
-          <p className="text-xs text-gray-500 mb-4">
-            Überschreibt die globale Admin-Konfiguration. Leer lassen um die globale Einstellung zu verwenden.
-          </p>
-          <div className="mb-4">
-            <label className={labelClass}>Provider</label>
-            <div className="flex gap-2">
-              {[
-                { value: '', label: 'Global (Admin)' },
-                { value: 'ollama', label: 'Ollama (lokal)' },
-                { value: 'claude', label: 'Claude API' },
-              ].map(({ value, label }) => (
-                <button key={value} type="button" onClick={() => set('ai_provider', value)}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
-                    form.ai_provider === value
-                      ? 'bg-primary-600 text-white border-primary-600'
-                      : 'bg-white text-gray-600 border-gray-300 hover:border-gray-400'
-                  }`}>{label}</button>
-              ))}
-            </div>
-          </div>
-          {form.ai_provider === 'ollama' && (
-            <div className="space-y-4">
-              <div>
-                <label className={labelClass}>Host-URL</label>
-                <input type="text" value={form.ollama_url} onChange={(e) => set('ollama_url', e.target.value)}
-                  placeholder="http://localhost:11434" className={fieldClass} />
-                <p className="text-xs text-gray-400 mt-1">IP-Adresse oder Hostname des Ollama-Servers</p>
-              </div>
-              <div>
-                <label className={labelClass}>Modell</label>
-                <input type="text" value={form.ollama_model} onChange={(e) => set('ollama_model', e.target.value)}
-                  placeholder="llama3.2" className={fieldClass} />
-              </div>
-            </div>
-          )}
-          {form.ai_provider === 'claude' && (
-            <div className="space-y-4">
-              <MaskedInput label="API-Key" value={form.claude_api_key}
-                onChange={(e) => set('claude_api_key', e.target.value)}
-                placeholder="sk-ant-..." className={fieldClass}
-                hint="Anthropic API-Key – wird maskiert gespeichert" />
-              <div>
-                <label className={labelClass}>Modell</label>
-                <select value={form.claude_model || 'claude-sonnet-4-6'} onChange={(e) => set('claude_model', e.target.value)} className={fieldClass}>
-                  {CLAUDE_MODELS.map(({ value, label }) => <option key={value} value={value}>{label}</option>)}
-                </select>
-              </div>
-            </div>
-          )}
         </section>
 
         {/* Zeitzone */}

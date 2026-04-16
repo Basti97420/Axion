@@ -145,9 +145,26 @@ export default function AiChatPanel() {
                           <span className="hidden group-open:inline text-[10px]">▼</span>
                           <span>{actionResultLabel(result)}</span>
                         </summary>
-                        <pre className="mt-1 ml-4 text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
-                          {JSON.stringify(result, null, 2)}
-                        </pre>
+                        <div className="mt-1 ml-4 space-y-1.5">
+                          {result._prompt && (
+                            <div>
+                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📤 Gesendeter Prompt</div>
+                              <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._prompt}</pre>
+                            </div>
+                          )}
+                          {result._raw && (
+                            <div>
+                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📥 KI-Antwort</div>
+                              <pre className="text-[10px] bg-yellow-50 border border-yellow-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._raw}</pre>
+                            </div>
+                          )}
+                          <div>
+                            <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📋 Ergebnis</div>
+                            <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
+                              {JSON.stringify(Object.fromEntries(Object.entries(result).filter(([k]) => !k.startsWith('_'))), null, 2)}
+                            </pre>
+                          </div>
+                        </div>
                       </details>
                     ))}
                   </div>

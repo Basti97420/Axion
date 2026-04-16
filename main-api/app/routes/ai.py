@@ -889,11 +889,20 @@ def chat():
             return _execute_ki_agent_action(act['type'], act.get('data') or {}, context)
         return _execute_action(act, current_user.id, context)
 
+    def _enrich(result, prompt_text, raw_response):
+        """Fügt _prompt und _raw als Metafelder zum Ergebnis hinzu."""
+        if not result:
+            return result
+        enriched = dict(result)
+        enriched['_prompt'] = prompt_text
+        enriched['_raw'] = raw_response
+        return enriched
+
     all_results = []
     if action and isinstance(action, dict) and action.get('type') not in (None, 'none'):
         action_result = _dispatch_action(action)
         if action_result:
-            all_results.append(action_result)
+            all_results.append(_enrich(action_result, message, raw))
 
         # Multi-Aktions-Loop: bis zu 10 Folgeaktionen ohne Nutzereingabe
         for _ in range(10):
@@ -925,7 +934,7 @@ def chat():
             else:
                 action_result = _dispatch_action(next_action)
             if action_result:
-                all_results.append(action_result)
+                all_results.append(_enrich(action_result, follow, raw))
             # Letzte Antwort der KI als reply verwenden
             reply = ai_resp.get('reply') or reply
 
