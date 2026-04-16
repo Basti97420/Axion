@@ -129,7 +129,7 @@ def _is_verifiable_action(action_type):
         'create_issue', 'update_issue', 'add_comment',
         'set_assignee', 'set_due_date', 'add_worklog',
         'create_wiki_page', 'update_wiki_page',
-        'create_milestone', 'update_milestone',
+        'create_milestone',
         'create_tag', 'create_subtask',
         'assign_milestone', 'set_dependency',
         'create_python_script',
@@ -251,13 +251,18 @@ def _verify_action(action, result):
 
     # create_issue → Issue muss in DB existieren
     if action_type == 'create_issue':
+        # Erst per result-ID prüfen (direkteste Methode)
+        issue_id = result.get('id') or result.get('issue_id')
+        if issue_id:
+            issue = Issue.query.get(issue_id)
+            if issue:
+                return {'ok': True, 'detail': f'Issue #{issue.id} "{issue.title}" existiert.'}
+        # Fallback: per Titel suchen
         title = action_data.get('title', '').strip()
-        issue = Issue.query.filter(
-            Issue.project_id == action.get('project_id') or 0,
-            Issue.title == title
-        ).order_by(Issue.created_at.desc()).first()
-        if issue:
-            return {'ok': True, 'detail': f'Issue #{issue.id} "{issue.title}" existiert.'}
+        if title:
+            issue = Issue.query.filter(Issue.title == title).order_by(Issue.created_at.desc()).first()
+            if issue:
+                return {'ok': True, 'detail': f'Issue #{issue.id} "{issue.title}" existiert.'}
         return {'ok': False, 'detail': f'Issue "{title}" wurde nicht gefunden.'}
 
     # update_issue / set_assignee / set_due_date / add_worklog / add_comment
@@ -298,7 +303,7 @@ def _verify_action(action, result):
         page = WikiPage.query.filter_by(slug=slug).first()
         if not page:
             return {'ok': False, 'detail': f'Wiki-Seite "{slug}" nicht mehr vorhanden.'}
-        if 'content' in action_data and page.content != action_data['content']:
+        if 'content' in action_data and (page.content or '').strip() != action_data['content'].strip():
             return {'ok': False, 'detail': f'Wiki-Seite "{slug}" Content stimmt nicht überein.'}
         return {'ok': True, 'detail': f'Wiki-Seite "{slug}" stimmt überein.'}
 
@@ -503,8 +508,8 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                         f'🤖 Agent „{agent.name}" wartet auf Bestätigung:\n\n'
                         f'🔔 <b>{action_type}</b>\n'
                         f'Details: {json.dumps(action.get("data") or {}, ensure_ascii=False)}\n\n'
-                        f'Bestätigen: /confirm_{agent.id}\n'
-                        f'Ablehnen: /deny_{agent.id}'
+                        f'Bestätigen: /confirm {agent.id}\n'
+                        f'Ablehnen: /deny {agent.id}'
                     )
                 except Exception:
                     pass
@@ -517,7 +522,7 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                         break
                 if agent.pending_confirmation:
                     output_parts.append(f'\n⏰ Timeout bei Bestätigung für `{action_type}` — übersprungen.')
-                    actions_log.append({'type': action_type, 'result': None, 'error': 'Timeout'})
+                    actions_log.append({'type': action_type, 'result': None, 'verified': False, 'retries': 0, 'error': 'Timeout'})
                     agent.pending_confirmation = None
                     db.session.commit()
                     action = None

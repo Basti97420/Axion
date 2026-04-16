@@ -24,10 +24,11 @@ class KiAgent(db.Model):
     retry_on_error   = db.Column(db.Boolean, default=False)
     retry_max        = db.Column(db.Integer, default=3)
     retry_delay_min  = db.Column(db.Integer, default=5)
-    last_run_at     = db.Column(db.DateTime, nullable=True)
-    next_run_at     = db.Column(db.DateTime, nullable=True)
-    schedule_days   = db.Column(db.Text, nullable=True)  # JSON-Array [0..6] Mo=0 So=6, null = täglich
-    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+    last_run_at          = db.Column(db.DateTime, nullable=True)
+    next_run_at          = db.Column(db.DateTime, nullable=True)
+    schedule_days        = db.Column(db.Text, nullable=True)  # JSON-Array [0..6] Mo=0 So=6, null = täglich
+    pending_confirmation = db.Column(db.String(50), nullable=True)  # Aktions-Typ der auf Bestätigung wartet
+    created_at           = db.Column(db.DateTime, default=datetime.utcnow)
 
     runs = db.relationship('KiAgentRun', backref='agent', lazy='dynamic',
                            cascade='all, delete-orphan')
@@ -52,10 +53,11 @@ class KiAgent(db.Model):
             'retry_on_error':  self.retry_on_error,
             'retry_max':       self.retry_max,
             'retry_delay_min': self.retry_delay_min,
-            'last_run_at':     self.last_run_at.isoformat() if self.last_run_at else None,
-            'next_run_at':     self.next_run_at.isoformat() if self.next_run_at else None,
-            'schedule_days':   json.loads(self.schedule_days) if self.schedule_days else None,
-            'created_at':      self.created_at.isoformat() if self.created_at else None,
+            'last_run_at':          self.last_run_at.isoformat() if self.last_run_at else None,
+            'next_run_at':          self.next_run_at.isoformat() if self.next_run_at else None,
+            'schedule_days':        json.loads(self.schedule_days) if self.schedule_days else None,
+            'pending_confirmation':  self.pending_confirmation,
+            'created_at':           self.created_at.isoformat() if self.created_at else None,
         }
 
 
