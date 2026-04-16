@@ -14,7 +14,7 @@
   <Category>Productivity: Tools:</Category>
   <WebUI>http://[IP]:[PORT:80]/</WebUI>
   <Icon>https://raw.githubusercontent.com/Basti97420/Axion/main/frontend/public/favicon.ico</Icon>
-  <ExtraParams/>
+  <ExtraParams>--add-host=host.docker.internal:host-gateway</ExtraParams>
   <PostArgs/>
   <DonateText/>
   <DonateLink/>
