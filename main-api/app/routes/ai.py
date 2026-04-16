@@ -84,7 +84,7 @@ Wenn du eine Aktion ausführst:
 {{"reply": "Ich prüfe den Script-Output...", "action": {{"type": "read_script_output", "data": {{"script_id": 3}}}}}}
 {{"reply": "Ich prüfe den Agenten-Output...", "action": {{"type": "read_agent_output", "data": {{"agent_id": 2}}}}}}
 
-Verfügbare Status-Werte: open, in_progress, in_review, done, cancelled
+Verfügbare Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Verfügbare Prioritäten: low, medium, high, critical
 
 Issue-Typen und Hierarchie:

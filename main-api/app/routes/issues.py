@@ -10,7 +10,7 @@ from app.services import telegram_bot as tg
 
 bp = Blueprint("issues", __name__, url_prefix="/api/issues")
 
-VALID_STATUSES = ["open", "in_progress", "in_review", "done", "cancelled"]
+VALID_STATUSES = ["open", "in_progress", "hold", "in_review", "done", "cancelled"]
 VALID_PRIORITIES = ["low", "medium", "high", "critical"]
 VALID_TYPES = ["task", "bug", "story", "epic", "subtask"]
 
@@ -142,10 +142,10 @@ def patch_status(issue_id):
     db.session.commit()
     cfg = tg.load_tg_config()
     if cfg.get('notify_on_status_change') and cfg.get('bot_token') and cfg.get('chat_id'):
-        old_label = {'open': 'Offen', 'in_progress': 'In Arbeit', 'in_review': 'Im Review',
-                     'done': 'Erledigt', 'cancelled': 'Abgebrochen'}.get(old_status, old_status)
-        new_label = {'open': 'Offen', 'in_progress': 'In Arbeit', 'in_review': 'Im Review',
-                     'done': 'Erledigt', 'cancelled': 'Abgebrochen'}.get(new_status, new_status)
+        _labels = {'open': 'Offen', 'in_progress': 'In Arbeit', 'hold': 'Pausiert',
+                   'in_review': 'Im Review', 'done': 'Erledigt', 'cancelled': 'Abgebrochen'}
+        old_label = _labels.get(old_status, old_status)
+        new_label = _labels.get(new_status, new_status)
         tg.notify(f'🔄 Issue <b>#{issue.id}</b> „{issue.title}": {old_label} → {new_label}')
     return jsonify(issue.to_dict()), 200
 

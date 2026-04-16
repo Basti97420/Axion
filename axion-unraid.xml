@@ -23,13 +23,13 @@
   <Config
     Name="Web UI Port"
     Target="80"
-    Default="80"
+    Default="7800"
     Mode="tcp"
-    Description="Port für das Web-Interface"
+    Description="Port für das Web-Interface (Standard 7800 – bitte anpassen falls belegt)"
     Type="Port"
     Display="always"
     Required="true"
-    Mask="false">80</Config>
+    Mask="false">7800</Config>
 
   <!-- Pfade -->
   <Config
@@ -125,13 +125,13 @@
   <Config
     Name="Claude Modell"
     Target="CLAUDE_MODEL"
-    Default="claude-sonnet-4-6"
+    Default="claude-sonnet-4-5"
     Mode=""
-    Description="Claude-Modellname (z.B. claude-sonnet-4-6)"
+    Description="Claude-Modellname (z.B. claude-sonnet-4-5, claude-opus-4-5, claude-haiku-4-5)"
     Type="Variable"
     Display="always"
     Required="false"
-    Mask="false">claude-sonnet-4-6</Config>
+    Mask="false">claude-sonnet-4-5</Config>
 
   <!-- Telegram Bot (optional) -->
   <Config

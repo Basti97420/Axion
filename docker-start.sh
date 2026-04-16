@@ -1,5 +1,4 @@
 #!/bin/sh
-set -e
 
 # Standard-Werte (überschreibbar mit docker run -e KEY=value)
 export FLASK_ENV=${FLASK_ENV:-production}
@@ -29,9 +28,16 @@ if [ -z "$SECRET_KEY" ]; then
     fi
 fi
 
-# Datenbankmigrationen
+# Supervisor-Log-Verzeichnis sicherstellen
+mkdir -p /var/log/supervisor
+
+# Datenbankmigrationen (nicht-fatal – Container startet auch bei Fehler)
 echo ">>> Starte Datenbank-Migrationen..."
-cd /app/main-api && FLASK_APP=run.py flask db upgrade
+cd /app/main-api
+if ! FLASK_APP=run.py flask db upgrade 2>&1; then
+    echo "!!! WARNUNG: Migration fehlgeschlagen – Container startet trotzdem."
+    echo "!!! Bitte Container-Logs in Unraid prüfen."
+fi
 
 echo ">>> Starte Services..."
 exec /usr/bin/supervisord -n -c /etc/supervisor/supervisord.conf

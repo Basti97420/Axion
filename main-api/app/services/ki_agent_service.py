@@ -386,7 +386,7 @@ Oder mit Aktion:
 {"reply": "...", "action": {"type": "create_file", "data": {"filename": "bericht.md", "content": "# Inhalt"}}}
 {"reply": "...", "action": {"type": "trigger_agent", "data": {"agent_id": 2}}}
 
-Status-Werte: open, in_progress, in_review, done, cancelled
+Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Prioritäten: low, medium, high, critical
 Typen: task, bug, story, epic
 Erlaubte Dateiendungen: .md, .txt, .csv

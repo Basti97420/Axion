@@ -30,8 +30,8 @@ DEFAULT_CONFIG = {
 }
 
 STATUS_LABELS = {
-    'open': 'Offen', 'in_progress': 'In Arbeit', 'in_review': 'Im Review',
-    'done': 'Erledigt', 'cancelled': 'Abgebrochen',
+    'open': 'Offen', 'in_progress': 'In Arbeit', 'hold': 'Pausiert',
+    'in_review': 'Im Review', 'done': 'Erledigt', 'cancelled': 'Abgebrochen',
 }
 PRIORITY_LABELS = {
     'low': 'Niedrig', 'medium': 'Mittel', 'high': 'Hoch', 'critical': 'Kritisch',
