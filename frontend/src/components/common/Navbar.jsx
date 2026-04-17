@@ -7,6 +7,7 @@ import { wikiApi } from '../../api/wikiApi'
 import { useAiStore } from '../../store/aiStore'
 import PasswordModal from './PasswordModal'
 import { STATUS_COLORS, STATUS_LABELS } from '../../utils/statusColors'
+import { APP_VERSION } from '../../utils/version'
 
 export default function Navbar({ onToggleSidebar }) {
   const user = useAuthStore((s) => s.user)
@@ -86,6 +87,7 @@ export default function Navbar({ onToggleSidebar }) {
 
       {/* Logo */}
       <span className="font-bold text-primary-600 text-lg tracking-tight select-none shrink-0">Axion</span>
+      <span className="text-xs text-gray-400 select-none font-mono shrink-0">v{APP_VERSION}</span>
 
       {/* Globale Suche */}
       <div className="relative flex-1 max-w-md">

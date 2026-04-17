@@ -1,4 +1,4 @@
-import { useRef, useEffect } from 'react'
+import { useRef, useEffect, useState } from 'react'
 import { Draggable } from '@fullcalendar/interaction'
 import { useIssueStore } from '../../store/issueStore'
 import IssueCard from './IssueCard'
@@ -8,9 +8,17 @@ import Button from '../common/Button'
 const PRIORITY_ORDER = { critical: 0, high: 1, medium: 2, low: 3 }
 const CLOSED_STATUSES = ['done', 'cancelled']
 
-export default function IssueList({ projectId, filters, onFiltersChange, onNewIssue, selectedIssueId, draggable, nativeDraggable, navKey = 0 }) {
+export default function IssueList({ projectId, filters, onFiltersChange, onNewIssue, onRefresh, selectedIssueId, draggable, nativeDraggable, navKey = 0 }) {
   const issues = useIssueStore((s) => s.issues)
   const listRef = useRef(null)
+  const [refreshing, setRefreshing] = useState(false)
+
+  async function handleRefresh() {
+    if (!onRefresh || refreshing) return
+    setRefreshing(true)
+    await Promise.resolve(onRefresh())
+    setTimeout(() => setRefreshing(false), 500)
+  }
 
   // Zeige erledigte Issues nur wenn explizit nach done/cancelled gefiltert wird
   const showingClosed = CLOSED_STATUSES.includes(filters.status)
@@ -55,9 +63,22 @@ export default function IssueList({ projectId, filters, onFiltersChange, onNewIs
       {/* Header */}
       <div className="px-3 py-3 border-b border-gray-200 shrink-0 space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-gray-700">
-            Issues <span className="text-gray-400 font-normal">({filtered.length})</span>
-          </span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-sm font-semibold text-gray-700">
+              Issues <span className="text-gray-400 font-normal">({filtered.length})</span>
+            </span>
+            {onRefresh && (
+              <button
+                onClick={handleRefresh}
+                title="Aktualisieren"
+                className={`p-0.5 rounded text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition-all ${refreshing ? 'animate-spin' : ''}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+              </button>
+            )}
+          </div>
           <Button size="sm" onClick={onNewIssue}>+ Neu</Button>
         </div>
         <IssueFilters filters={filters} onChange={onFiltersChange} />

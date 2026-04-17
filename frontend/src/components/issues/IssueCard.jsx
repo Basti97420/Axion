@@ -115,7 +115,7 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
           icon: '📑', label: 'Duplizieren',
           onClick: async () => {
             try {
-              await issuesApi.create({
+              const { data } = await issuesApi.create({
                 title: `${issue.title} (Kopie)`,
                 description: issue.description,
                 type: issue.type,
@@ -123,6 +123,7 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
                 project_id: issue.project_id,
                 status: 'open',
               })
+              upsertIssue(data)
             } catch {}
           },
         },

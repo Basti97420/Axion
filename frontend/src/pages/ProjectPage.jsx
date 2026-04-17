@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useParams, useLocation, useSearchParams } from 'react-router-dom'
 import { projectsApi } from '../api/projectsApi'
 import { issuesApi } from '../api/issuesApi'
@@ -27,10 +27,36 @@ export default function ProjectPage() {
   const [showNewIssue, setShowNewIssue] = useState(false)
   const [saving, setSaving] = useState(false)
 
+  const loadIssues = useCallback(() => {
+    projectsApi.getIssues(id).then(({ data }) => setIssues(data)).catch(() => {})
+  }, [id, setIssues])
+
   useEffect(() => {
     projectsApi.getOne(id).then(({ data }) => setCurrentProject(data)).catch(() => {})
-    projectsApi.getIssues(id).then(({ data }) => setIssues(data)).catch(() => {})
+    loadIssues()
   }, [id])
+
+  // Polling: alle 15 s neu laden, pausiert wenn Tab im Hintergrund
+  useEffect(() => {
+    const INTERVAL = 15_000
+    let timer = null
+
+    function start() {
+      if (document.visibilityState === 'visible') {
+        timer = setInterval(loadIssues, INTERVAL)
+      }
+    }
+    function stop() { clearInterval(timer); timer = null }
+
+    function onVisibility() {
+      if (document.visibilityState === 'visible') { stop(); start() }
+      else { stop() }
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
+  }, [loadIssues])
 
   // Aktuell geöffnetes Issue aus URL (für Markierung in der Liste)
   const selectedIssueId = location.pathname.match(/issues\/(\d+)/)?.[1]
@@ -70,6 +96,7 @@ export default function ProjectPage() {
           filters={filters}
           onFiltersChange={setFilters}
           onNewIssue={() => setShowNewIssue(true)}
+          onRefresh={loadIssues}
           selectedIssueId={selectedIssueId}
           nativeDraggable={view === 'milestones'}
         />

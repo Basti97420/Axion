@@ -108,7 +108,7 @@ export default function KanbanCard({ issue, projectId }) {
           icon: '📑', label: 'Duplizieren',
           onClick: async () => {
             try {
-              await issuesApi.create({
+              const { data } = await issuesApi.create({
                 title: `${issue.title} (Kopie)`,
                 description: issue.description,
                 type: issue.type,
@@ -116,6 +116,7 @@ export default function KanbanCard({ issue, projectId }) {
                 project_id: issue.project_id,
                 status: 'open',
               })
+              upsertIssue(data)
             } catch {}
           },
         },
