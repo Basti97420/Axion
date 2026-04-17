@@ -4,6 +4,7 @@ import { useNavigate, Link } from 'react-router-dom'
 import Badge from '../common/Badge'
 import Button from '../common/Button'
 import Modal from '../common/Modal'
+import ContextMenu from '../common/ContextMenu'
 import IssueForm from './IssueForm'
 import IcloudEventModal from '../calendar/IcloudEventModal'
 import WorklogTimer from '../worklog/WorklogTimer'
@@ -99,6 +100,9 @@ export default function IssueDetail({ issue, projectId }) {
   const [saving, setSaving] = useState(false)
   const [statusError, setStatusError] = useState('')
   const [showPreview, setShowPreview] = useState({})
+  const [isDraggingFile, setIsDraggingFile] = useState(false)
+  const [uploadingFiles, setUploadingFiles] = useState([]) // [{name, done, error}]
+  const [attMenu, setAttMenu] = useState(null) // Rechtsklick auf Anhang
 
   useEffect(() => {
     function handleClickOutside(e) {
@@ -131,21 +135,72 @@ export default function IssueDetail({ issue, projectId }) {
   }, [issue.id, issue.type, issue.parent_id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   async function handleFileUpload(e) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    try {
-      const { data } = await attachmentsApi.upload(issue.id, file)
-      setAttachments((prev) => [data, ...prev])
-    } catch (err) {
-      alert(err.response?.data?.error || 'Upload fehlgeschlagen')
-    } finally {
-      e.target.value = ''
-    }
+    const files = Array.from(e.target.files || [])
+    if (!files.length) return
+    e.target.value = ''
+    const slots = files.map((f) => ({ name: f.name, done: false, error: false }))
+    setUploadingFiles(slots)
+    await Promise.all(files.map(async (file, i) => {
+      try {
+        const { data } = await attachmentsApi.upload(issue.id, file)
+        setAttachments((prev) => [data, ...prev])
+        setUploadingFiles((prev) => prev.map((s, j) => j === i ? { ...s, done: true } : s))
+      } catch {
+        setUploadingFiles((prev) => prev.map((s, j) => j === i ? { ...s, error: true } : s))
+      }
+    }))
+    setTimeout(() => setUploadingFiles([]), 2000)
   }
 
   async function handleDeleteAttachment(attId) {
     await attachmentsApi.remove(attId)
     setAttachments((prev) => prev.filter((a) => a.id !== attId))
+  }
+
+  function handleDragOver(e) {
+    if (e.dataTransfer.types.includes('Files')) {
+      e.preventDefault()
+      setIsDraggingFile(true)
+    }
+  }
+  function handleDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) setIsDraggingFile(false)
+  }
+  async function handleDrop(e) {
+    e.preventDefault()
+    setIsDraggingFile(false)
+    const files = Array.from(e.dataTransfer.files)
+    if (!files.length) return
+    const slots = files.map((f) => ({ name: f.name, done: false, error: false }))
+    setUploadingFiles(slots)
+    await Promise.all(files.map(async (file, i) => {
+      try {
+        const { data } = await attachmentsApi.upload(issue.id, file)
+        setAttachments((prev) => [data, ...prev])
+        setUploadingFiles((prev) => prev.map((s, j) => j === i ? { ...s, done: true } : s))
+      } catch {
+        setUploadingFiles((prev) => prev.map((s, j) => j === i ? { ...s, error: true } : s))
+      }
+    }))
+    setTimeout(() => setUploadingFiles([]), 2000)
+  }
+
+  function openAttMenu(e, att) {
+    e.preventDefault()
+    const preview = attachmentsApi.previewUrl(att.id)
+    setAttMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        { icon: '⬇', label: 'Herunterladen', onClick: () => attachmentsApi.download(att.id) },
+        { icon: '👁', label: 'Vorschau öffnen', onClick: () => window.open(preview, '_blank') },
+        { icon: '🔗', label: 'URL kopieren', onClick: () => navigator.clipboard.writeText(preview) },
+        { divider: true },
+        ...(att.uploader_id === user?.id || user?.is_admin ? [{
+          icon: '🗑', label: 'Löschen', danger: true,
+          onClick: () => handleDeleteAttachment(att.id),
+        }] : []),
+      ],
+    })
   }
 
   async function handleWorklogSave(data) {
@@ -532,30 +587,57 @@ export default function IssueDetail({ issue, projectId }) {
 
             {/* Anhänge */}
             {tab === 'attachments' && (
-              <div className="space-y-3">
-                <div>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                  />
+              <div
+                className={`space-y-3 rounded-xl transition-all ${
+                  isDraggingFile ? 'ring-2 ring-primary-400 bg-primary-50 p-3' : ''
+                }`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+              >
+                <div className="flex items-center gap-3">
+                  <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileUpload} />
                   <button
                     onClick={() => fileInputRef.current?.click()}
                     className="px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors"
                   >
                     + Datei hochladen
                   </button>
+                  <span className="text-xs text-gray-400">oder Dateien hierher ziehen</span>
                 </div>
-                {attachments.length === 0 && (
-                  <p className="text-sm text-gray-400">Keine Anhänge</p>
+
+                {isDraggingFile && (
+                  <div className="text-center py-6 text-primary-600 font-medium text-sm">
+                    ⬇ Dateien loslassen zum Hochladen
+                  </div>
                 )}
+
+                {/* Upload-Fortschritt */}
+                {uploadingFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 text-xs text-gray-500 bg-gray-50 rounded-lg px-3 py-2">
+                    {f.done ? '✓' : f.error ? '✗' : '⏳'}
+                    <span className={f.error ? 'text-red-500' : f.done ? 'text-green-600' : ''}>
+                      {f.name}
+                    </span>
+                  </div>
+                ))}
+
+                {attachments.length === 0 && uploadingFiles.length === 0 && !isDraggingFile && (
+                  <p className="text-sm text-gray-400 text-center py-6">
+                    📎 Noch keine Anhänge — Dateien hochladen oder hierher ziehen
+                  </p>
+                )}
+
                 {attachments.map((att) => {
                   const isImage = att.mime_type?.startsWith('image/')
                   const isPdf   = att.mime_type === 'application/pdf'
                   const preview = attachmentsApi.previewUrl(att.id)
                   return (
-                    <div key={att.id} className="border border-gray-100 rounded-xl p-3 hover:border-gray-200 transition-colors">
+                    <div
+                      key={att.id}
+                      className="border border-gray-100 rounded-xl p-3 hover:border-gray-200 transition-colors cursor-context-menu"
+                      onContextMenu={(e) => openAttMenu(e, att)}
+                    >
                       <div className="flex items-center gap-3">
                         {isImage ? (
                           <img
@@ -565,13 +647,9 @@ export default function IssueDetail({ issue, projectId }) {
                             onClick={() => window.open(preview, '_blank')}
                           />
                         ) : isPdf ? (
-                          <div className="w-10 h-10 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center text-red-400 text-xs font-bold shrink-0">
-                            PDF
-                          </div>
+                          <div className="w-10 h-10 bg-red-50 border border-red-100 rounded-lg flex items-center justify-center text-red-400 text-xs font-bold shrink-0">PDF</div>
                         ) : (
-                          <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center text-gray-300 text-lg shrink-0">
-                            📄
-                          </div>
+                          <div className="w-10 h-10 bg-gray-50 border border-gray-100 rounded-lg flex items-center justify-center text-gray-300 text-lg shrink-0">📄</div>
                         )}
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-gray-800 font-medium truncate">{att.original_name}</p>
@@ -586,33 +664,22 @@ export default function IssueDetail({ issue, projectId }) {
                               {showPreview[att.id] ? 'Einklappen' : 'Vorschau'}
                             </button>
                           )}
-                          <button
-                            onClick={() => attachmentsApi.download(att.id)}
-                            className="text-xs text-primary-600 hover:text-primary-800"
-                          >
-                            ↓ Laden
-                          </button>
+                          <button onClick={() => attachmentsApi.download(att.id)} className="text-xs text-primary-600 hover:text-primary-800">↓ Laden</button>
                           {(att.uploader_id === user?.id || user?.is_admin) && (
-                            <button
-                              onClick={() => handleDeleteAttachment(att.id)}
-                              className="text-xs text-gray-300 hover:text-red-500 transition-colors"
-                            >
-                              Löschen
-                            </button>
+                            <button onClick={() => handleDeleteAttachment(att.id)} className="text-xs text-gray-300 hover:text-red-500 transition-colors">Löschen</button>
                           )}
                         </div>
                       </div>
                       {isPdf && showPreview[att.id] && (
-                        <iframe
-                          src={preview}
-                          title={att.original_name}
-                          className="w-full h-48 mt-3 rounded-lg border border-gray-100"
-                        />
+                        <iframe src={preview} title={att.original_name} className="w-full h-48 mt-3 rounded-lg border border-gray-100" />
                       )}
                     </div>
                   )
                 })}
               </div>
+            )}
+            {attMenu && (
+              <ContextMenu x={attMenu.x} y={attMenu.y} items={attMenu.items} onClose={() => setAttMenu(null)} />
             )}
           </div>
         </div>

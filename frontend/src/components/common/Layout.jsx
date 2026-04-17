@@ -1,5 +1,5 @@
-import { Outlet } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { Outlet, useLocation, useParams } from 'react-router-dom'
+import { useEffect, useState, useRef } from 'react'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
 import AiChatPanel from '../ai/AiChatPanel'
@@ -7,6 +7,55 @@ import { projectsApi } from '../../api/projectsApi'
 import { useProjectStore } from '../../store/projectStore'
 import { userSettingsApi } from '../../api/userSettingsApi'
 import { setUserTimezone } from '../../utils/dateUtils'
+
+function GlobalDragOverlay() {
+  const [visible, setVisible] = useState(false)
+  const dragCount = useRef(0)
+  const location = useLocation()
+
+  useEffect(() => {
+    function onEnter(e) {
+      if (!e.dataTransfer?.types?.includes('Files')) return
+      dragCount.current++
+      setVisible(true)
+    }
+    function onLeave() {
+      dragCount.current = Math.max(0, dragCount.current - 1)
+      if (dragCount.current === 0) setVisible(false)
+    }
+    function onDrop() {
+      dragCount.current = 0
+      setVisible(false)
+    }
+    window.addEventListener('dragenter', onEnter)
+    window.addEventListener('dragleave', onLeave)
+    window.addEventListener('drop', onDrop)
+    return () => {
+      window.removeEventListener('dragenter', onEnter)
+      window.removeEventListener('dragleave', onLeave)
+      window.removeEventListener('drop', onDrop)
+    }
+  }, [])
+
+  // Hinweistext je nach aktueller Route
+  function hint() {
+    const p = location.pathname
+    if (p.match(/\/issues\/\d+/))  return '📎 Datei auf dem Issue ablegen zum Hochladen'
+    if (p.match(/\/wiki\//))       return '🖼 Datei im Wiki-Editor ablegen zum Einbetten'
+    if (p.match(/\/python-scripts/)) return '🐍 .py-Datei auf den Editor ziehen zum Importieren'
+    return '📁 Navigiere zu einem Issue oder Wiki, um Dateien hochzuladen'
+  }
+
+  if (!visible) return null
+
+  return (
+    <div className="fixed inset-0 z-[8888] pointer-events-none flex items-end justify-center pb-8">
+      <div className="bg-gray-900/80 text-white text-sm px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-sm">
+        {hint()}
+      </div>
+    </div>
+  )
+}
 
 export default function Layout() {
   const setProjects = useProjectStore((s) => s.setProjects)
@@ -43,6 +92,7 @@ export default function Layout() {
         </main>
       </div>
       <AiChatPanel />
+      <GlobalDragOverlay />
     </div>
   )
 }

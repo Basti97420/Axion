@@ -1,10 +1,13 @@
 import { useState, useEffect } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { wikiApi } from '../../api/wikiApi'
+import ContextMenu from '../common/ContextMenu'
 
-function TreeNode({ page, level = 0 }) {
+function TreeNode({ page, level = 0, onDeleted, onNewChild }) {
+  const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const [children, setChildren] = useState([])
+  const [menu, setMenu] = useState(null)
 
   async function toggle() {
     if (!open && page.has_children && children.length === 0) {
@@ -12,6 +15,37 @@ function TreeNode({ page, level = 0 }) {
       setChildren(data)
     }
     setOpen((v) => !v)
+  }
+
+  function handleContextMenu(e) {
+    e.preventDefault()
+    e.stopPropagation()
+    setMenu({
+      x: e.clientX, y: e.clientY,
+      items: [
+        {
+          icon: '✏️', label: 'Umbenennen',
+          onClick: () => navigate(`/wiki/${page.slug}?edit=1`),
+        },
+        {
+          icon: '➕', label: 'Unterseite erstellen',
+          onClick: () => onNewChild?.(page.slug),
+        },
+        { divider: true },
+        {
+          icon: '🗑', label: 'Löschen', danger: true,
+          onClick: async () => {
+            if (!confirm(`Wiki-Seite „${page.title}" wirklich löschen?`)) return
+            try {
+              await wikiApi.deletePage(page.slug)
+              onDeleted?.(page.slug)
+            } catch (err) {
+              alert(err.response?.data?.error || 'Löschen fehlgeschlagen')
+            }
+          },
+        },
+      ],
+    })
   }
 
   const indent = level * 12
@@ -34,6 +68,7 @@ function TreeNode({ page, level = 0 }) {
         )}
         <NavLink
           to={`/wiki/${page.slug}`}
+          onContextMenu={handleContextMenu}
           className={({ isActive }) =>
             `flex-1 text-sm py-1 pr-2 rounded truncate transition-colors ${
               isActive
@@ -46,21 +81,38 @@ function TreeNode({ page, level = 0 }) {
         </NavLink>
       </div>
       {open && children.map((child) => (
-        <TreeNode key={child.slug} page={child} level={level + 1} />
+        <TreeNode
+          key={child.slug}
+          page={child}
+          level={level + 1}
+          onDeleted={(slug) => setChildren((c) => c.filter((p) => p.slug !== slug))}
+          onNewChild={onNewChild}
+        />
       ))}
+      {menu && (
+        <ContextMenu
+          x={menu.x} y={menu.y}
+          items={menu.items}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </div>
   )
 }
 
 export default function WikiTree({ onNewPage }) {
-  const [pages, setPages] = useState([])
   const navigate = useNavigate()
+  const [pages, setPages] = useState([])
 
   useEffect(() => {
     wikiApi.listPages({ parent_id: null })
       .then(({ data }) => setPages(data))
       .catch(() => {})
   }, [])
+
+  function handleNewChild(parentSlug) {
+    navigate(`/wiki/new?parent=${parentSlug}`)
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -78,7 +130,13 @@ export default function WikiTree({ onNewPage }) {
           <p className="text-xs text-gray-400 px-4 py-2">Noch keine Seiten.</p>
         ) : (
           pages.map((page) => (
-            <TreeNode key={page.slug} page={page} level={0} />
+            <TreeNode
+              key={page.slug}
+              page={page}
+              level={0}
+              onDeleted={(slug) => setPages((p) => p.filter((x) => x.slug !== slug))}
+              onNewChild={handleNewChild}
+            />
           ))
         )}
       </nav>

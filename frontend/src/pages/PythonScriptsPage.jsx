@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import CodeMirror from '@uiw/react-codemirror'
@@ -8,6 +8,65 @@ import { formatDateTime } from '../utils/dateUtils'
 import Button from '../components/common/Button'
 
 const FIELD_CLASSES = 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full'
+
+function PyDropZone({ code, onChange }) {
+  const [isDragging, setIsDragging] = useState(false)
+  const [dropError, setDropError] = useState('')
+
+  function handleDragOver(e) {
+    if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setIsDragging(true) }
+  }
+  function handleDragLeave(e) {
+    if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false)
+  }
+  function handleDrop(e) {
+    e.preventDefault()
+    setIsDragging(false)
+    setDropError('')
+    const file = e.dataTransfer.files[0]
+    if (!file) return
+    if (!file.name.endsWith('.py')) {
+      setDropError('Nur .py-Dateien werden unterstützt')
+      setTimeout(() => setDropError(''), 3000)
+      return
+    }
+    if (code.trim() && !confirm('Aktuellen Code durch die importierte Datei ersetzen?')) return
+    const reader = new FileReader()
+    reader.onload = (ev) => onChange(ev.target.result)
+    reader.readAsText(file)
+  }
+
+  return (
+    <div
+      className={`border rounded-lg overflow-hidden text-sm transition-all ${
+        isDragging ? 'ring-2 ring-primary-400 border-primary-300' :
+        dropError  ? 'ring-2 ring-red-400 border-red-300' :
+                     'border-gray-300'
+      }`}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {isDragging && (
+        <div className="bg-primary-50 text-primary-600 text-center py-2 text-xs font-medium">
+          ⬇ .py-Datei loslassen zum Importieren
+        </div>
+      )}
+      {dropError && (
+        <div className="bg-red-50 text-red-600 text-center py-2 text-xs font-medium">
+          ✗ {dropError}
+        </div>
+      )}
+      <CodeMirror
+        value={code}
+        height="320px"
+        extensions={[python()]}
+        onChange={onChange}
+        basicSetup={{ lineNumbers: true, highlightActiveLine: true, autocompletion: true, indentOnInput: true, tabSize: 4 }}
+      />
+    </div>
+  )
+}
 const LABEL_CLASSES = 'block text-xs font-medium text-gray-600 mb-1'
 
 const TEMPLATES = [
@@ -598,24 +657,10 @@ function ScriptForm({ script, onSave, onDelete, onRun, running, onRunCell, cellR
           />
         ) : (
           <>
-            <div className="border border-gray-300 rounded-lg overflow-hidden text-sm">
-              <CodeMirror
-                value={form.code}
-                height="320px"
-                extensions={[python()]}
-                onChange={(val) => set('code', val)}
-                basicSetup={{
-                  lineNumbers: true,
-                  highlightActiveLine: true,
-                  autocompletion: true,
-                  indentOnInput: true,
-                  tabSize: 4,
-                }}
-              />
-            </div>
+            <PyDropZone code={form.code} onChange={(val) => set('code', val)} />
             <p className="text-xs text-gray-400 mt-1">
               Verfügbar: <code className="bg-gray-100 px-1 rounded">import axion</code> für Projekt-Zugriff
-              (Issues, Wiki, Workspaces)
+              (Issues, Wiki, Workspaces) · <span className="text-gray-400">.py-Datei auf den Editor ziehen zum Importieren</span>
             </p>
           </>
         )}
