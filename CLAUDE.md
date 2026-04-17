@@ -302,6 +302,47 @@ Interne Endpunkte (Token: `X-Script-Token`):
 - `assignee_id`: bei Issue-Erstellung automatisch auf `current_user.id` gesetzt, wenn kein Wert übergeben wird
 - Kanban blendet `done`/`cancelled`-Issues automatisch aus, wenn `closed_at` älter als 2 Tage ist
 
+## Release-Prozess
+
+Bei **jedem Commit mit nutzbaren Änderungen** sind diese drei Schritte Pflicht:
+
+### 1. Versionsnummer erhöhen
+Die Versionsnummer liegt in `frontend/src/utils/version.js`:
+```js
+export const APP_VERSION = '1.0.0'
+```
+Schema: `MAJOR.MINOR.PATCH`
+- **PATCH** (+0.0.1): Bugfixes, kleine Anpassungen, Styling
+- **MINOR** (+0.1.0): Neue Features, sichtbare Funktionserweiterungen
+- **MAJOR** (+1.0.0): Grundlegende Umbauten, Breaking Changes
+
+### 2. Docker-Image bauen und pushen
+Das Image muss **immer multi-arch für Linux** gebaut werden (Unraid läuft auf Linux, nicht macOS):
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 \
+  -t basti97420/axion:latest --push .
+```
+Danach lokalen Container neu starten:
+```bash
+docker pull basti97420/axion:latest
+docker stop axionv2 && docker rm axionv2
+docker run -d --name axionv2 -p 65443:80 \
+  -v axion_data:/app/instance \
+  --restart unless-stopped \
+  basti97420/axion:latest
+```
+
+### 3. Unraid-Template (`axion-unraid.xml`) prüfen
+Falls sich geändert hat:
+- Standard-Port (aktuell 7800)
+- Neue Volume-Mounts oder Umgebungsvariablen
+- `<ExtraParams>` (aktuell: `--add-host=host.docker.internal:host-gateway`, nötig auf Linux)
+- Standard-Modellname (`claude_model` o.ä.)
+
+→ `axion-unraid.xml` entsprechend anpassen, damit Unraid-Nutzer beim Neuinstallieren korrekte Defaults bekommen.
+
+---
+
 ## Bekannte Eigenheiten
 
 - **Zwei Drag-Systeme**: FullCalendar-Drag (für Kalender-Einträge) und HTML5-native-Drag (für Milestone-Drop) können auf der gleichen Seite koexistieren; `nativeDraggable` Prop auf IssueCard steuert welches aktiv ist
