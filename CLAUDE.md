@@ -317,11 +317,18 @@ Schema: `MAJOR.MINOR.PATCH`
 - **MAJOR** (+1.0.0): Grundlegende Umbauten, Breaking Changes
 
 ### 2. Docker-Image bauen und pushen
-Das Image muss **immer multi-arch für Linux** gebaut werden (Unraid läuft auf Linux, nicht macOS):
+Das Image muss **immer multi-arch** gebaut werden – ein einziger Push deckt beide Ziele ab:
+- `linux/amd64` → Linux-Server (Unraid, x86)
+- `linux/arm64` → macOS M3/M4 (Apple Silicon, läuft nativ in Docker Desktop) + ARM-Linux
+
 ```bash
 docker buildx build --platform linux/amd64,linux/arm64 \
   -t basti97420/axion:latest --push .
 ```
+
+> **Warum ein Build reicht**: Docker Hub speichert beide Architekturen unter demselben Tag.
+> Auf dem Mac (M3) zieht `docker pull` automatisch das `arm64`-Image; auf Unraid (x86) das `amd64`-Image.
+
 Danach lokalen Container neu starten:
 ```bash
 docker pull basti97420/axion:latest
