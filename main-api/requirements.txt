@@ -1,4 +1,6 @@
 flask==3.1.0
+gunicorn==21.2.0
+bleach==6.1.0
 flask-sqlalchemy==3.1.1
 flask-migrate==4.0.7
 flask-login==0.6.3

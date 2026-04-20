@@ -4,10 +4,12 @@ import { projectsApi } from '../api/projectsApi'
 import ProjectGrid from '../components/projects/ProjectGrid'
 import ProjectForm from '../components/projects/ProjectForm'
 import Modal from '../components/common/Modal'
+import { useToastStore } from '../store/toastStore'
 
 export default function HomePage() {
   const projects = useProjectStore((s) => s.projects)
   const { upsertProject, removeProject } = useProjectStore()
+  const { showToast, showConfirm } = useToastStore()
   const [modal, setModal] = useState(null) // null | 'create' | {project}
   const [loading, setLoading] = useState(false)
 
@@ -18,7 +20,7 @@ export default function HomePage() {
       upsertProject(project)
       setModal(null)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Erstellen')
+      showToast(err.response?.data?.error || 'Fehler beim Erstellen', 'error')
     } finally {
       setLoading(false)
     }
@@ -31,14 +33,14 @@ export default function HomePage() {
       upsertProject(project)
       setModal(null)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Speichern')
+      showToast(err.response?.data?.error || 'Fehler beim Speichern', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   async function handleDelete(project) {
-    if (!confirm(`Projekt "${project.name}" wirklich löschen? Alle Issues werden ebenfalls gelöscht.`)) return
+    if (!await showConfirm(`Projekt "${project.name}" wirklich löschen? Alle Issues werden ebenfalls gelöscht.`)) return
     await projectsApi.remove(project.id)
     removeProject(project.id)
   }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAuthStore } from '../store/authStore'
 import { adminApi } from '../api/adminApi'
 import Modal from '../components/common/Modal'
+import { useToastStore } from '../store/toastStore'
 
 function UserForm({ initial, onSubmit, onCancel, loading }) {
   const [name, setName] = useState(initial?.name || '')
@@ -68,6 +69,7 @@ function UserForm({ initial, onSubmit, onCancel, loading }) {
 
 export default function AdminUsersPage() {
   const currentUser = useAuthStore((s) => s.user)
+  const { showToast, showConfirm } = useToastStore()
   const [users, setUsers] = useState([])
   const [modal, setModal] = useState(null) // null | 'create' | user object
   const [loading, setLoading] = useState(false)
@@ -93,7 +95,7 @@ export default function AdminUsersPage() {
       await loadUsers()
       setModal(null)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Erstellen')
+      showToast(err.response?.data?.error || 'Fehler beim Erstellen', 'error')
     } finally {
       setLoading(false)
     }
@@ -106,19 +108,19 @@ export default function AdminUsersPage() {
       await loadUsers()
       setModal(null)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Speichern')
+      showToast(err.response?.data?.error || 'Fehler beim Speichern', 'error')
     } finally {
       setLoading(false)
     }
   }
 
   async function handleDelete(user) {
-    if (!confirm(`Benutzer "${user.name}" wirklich löschen?`)) return
+    if (!await showConfirm(`Benutzer "${user.name}" wirklich löschen?`)) return
     try {
       await adminApi.deleteUser(user.id)
       await loadUsers()
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Löschen')
+      showToast(err.response?.data?.error || 'Fehler beim Löschen', 'error')
     }
   }
 

@@ -6,6 +6,7 @@ import { telegramSettingsApi } from '../api/telegramSettingsApi'
 import { projectsApi } from '../api/projectsApi'
 import PasswordModal from '../components/common/PasswordModal'
 import { setUserTimezone } from '../utils/dateUtils'
+import { useToastStore } from '../store/toastStore'
 
 const CLAUDE_MODELS = [
   { value: 'claude-sonnet-4-5',          label: 'Claude Sonnet 4.5 (Empfohlen)' },
@@ -64,6 +65,7 @@ function MaskedInput({ value, onChange, placeholder, label, hint, className }) {
 
 export default function UserSettingsPage() {
   const user = useAuthStore((s) => s.user)
+  const { showConfirm } = useToastStore()
 
   // Persönliche Einstellungen
   const [form, setForm] = useState(DEFAULT_FORM)
@@ -250,7 +252,7 @@ export default function UserSettingsPage() {
 
   // Admin: Backup löschen
   async function handleBackupDelete(filename) {
-    if (!window.confirm(`Backup "${filename}" wirklich löschen?`)) return
+    if (!await showConfirm(`Backup "${filename}" wirklich löschen?`)) return
     try {
       await settingsApi.deleteBackup(filename)
       setBackupList((l) => l.filter((b) => b.filename !== filename))

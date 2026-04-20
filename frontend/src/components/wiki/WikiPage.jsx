@@ -5,9 +5,11 @@ import 'katex/dist/katex.min.css'
 import Button from '../common/Button'
 import { wikiApi } from '../../api/wikiApi'
 import { formatDateTime } from '../../utils/dateUtils'
+import { useToastStore } from '../../store/toastStore'
 
 export default function WikiPage({ page, onEdit, onDelete }) {
   const navigate = useNavigate()
+  const { showToast, showConfirm } = useToastStore()
   const [uploading, setUploading] = useState(false)
   const [attachments, setAttachments] = useState(page.attachments || [])
   const contentRef = useRef(null)
@@ -35,7 +37,7 @@ export default function WikiPage({ page, onEdit, onDelete }) {
       const { data } = await wikiApi.uploadAttachment(page.slug, file)
       setAttachments((prev) => [...prev, data])
     } catch {
-      alert('Upload fehlgeschlagen')
+      showToast('Upload fehlgeschlagen', 'error')
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -43,7 +45,7 @@ export default function WikiPage({ page, onEdit, onDelete }) {
   }
 
   async function handleDeleteAttachment(id) {
-    if (!confirm('Anhang löschen?')) return
+    if (!await showConfirm('Anhang löschen?')) return
     await wikiApi.deleteAttachment(id)
     setAttachments((prev) => prev.filter((a) => a.id !== id))
   }

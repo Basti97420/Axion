@@ -5,6 +5,7 @@ import { useIssueStore } from '../../store/issueStore'
 import { formatDate } from '../../utils/dateUtils'
 import Modal from '../common/Modal'
 import Button from '../common/Button'
+import { useToastStore } from '../../store/toastStore'
 
 function MilestoneForm({ onSubmit, onCancel, loading, initial = {} }) {
   const [name, setName] = useState(initial.name || '')
@@ -53,6 +54,7 @@ function ProgressBar({ value }) {
 }
 
 export default function MilestoneList({ projectId }) {
+  const { showToast, showConfirm } = useToastStore()
   const [milestones, setMilestones] = useState([])
   const [showCreate, setShowCreate] = useState(false)
   const [editTarget, setEditTarget] = useState(null)
@@ -93,7 +95,7 @@ export default function MilestoneList({ projectId }) {
       setMilestones((prev) => [...prev, m])
       setShowCreate(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }
@@ -106,14 +108,14 @@ export default function MilestoneList({ projectId }) {
       setMilestones((prev) => prev.map((x) => x.id === m.id ? m : x))
       setEditTarget(null)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete(id) {
-    if (!confirm('Meilenstein löschen? Issues werden nicht gelöscht.')) return
+    if (!await showConfirm('Meilenstein löschen? Issues werden nicht gelöscht.')) return
     await milestonesApi.remove(id).catch(() => {})
     setMilestones((prev) => prev.filter((m) => m.id !== id))
   }

@@ -5,6 +5,7 @@ import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import Button from '../common/Button'
 import { wikiApi } from '../../api/wikiApi'
+import { useToastStore } from '../../store/toastStore'
 
 const tableCommand = {
   name: 'table',
@@ -28,7 +29,7 @@ const linkCommand = {
   },
 }
 
-function makeImageCommand(slug) {
+function makeImageCommand(slug, showToast) {
   return {
     name: 'image-upload',
     buttonProps: { title: 'Bild hochladen', 'aria-label': 'Bild hochladen' },
@@ -45,7 +46,7 @@ function makeImageCommand(slug) {
           const url = wikiApi.getAttachmentUrl(data.id)
           api.replaceSelection(`![${file.name}](${url})`)
         } catch {
-          alert('Bild-Upload fehlgeschlagen')
+          showToast('Bild-Upload fehlgeschlagen', 'error')
         }
       }
       input.click()
@@ -54,6 +55,7 @@ function makeImageCommand(slug) {
 }
 
 export default function WikiEditor({ initial, onSave, onCancel, loading, slug }) {
+  const { showToast } = useToastStore()
   const [title, setTitle] = useState(initial?.title || '')
   const [content, setContent] = useState(initial?.content || '')
   const [isDragging, setIsDragging] = useState(false)
@@ -153,7 +155,7 @@ export default function WikiEditor({ initial, onSave, onCancel, loading, slug })
     commands.divider,
     tableCommand,
     linkCommand,
-    ...(slug ? [makeImageCommand(slug)] : []),
+    ...(slug ? [makeImageCommand(slug, showToast)] : []),
   ]
 
   return (

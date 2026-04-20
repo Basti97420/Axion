@@ -19,6 +19,7 @@ import { attachmentsApi } from '../../api/attachmentsApi'
 import { useIssueStore } from '../../store/issueStore'
 import { useAuthStore } from '../../store/authStore'
 import DependenciesSection from './DependenciesSection'
+import { useToastStore } from '../../store/toastStore'
 
 const ACTION_DOT = {
   status_changed: 'bg-blue-400',
@@ -82,6 +83,7 @@ export default function IssueDetail({ issue, projectId }) {
   const navigate = useNavigate()
   const { upsertIssue, removeIssue } = useIssueStore()
   const user = useAuthStore((s) => s.user)
+  const { showToast, showConfirm } = useToastStore()
   const [activity, setActivity] = useState([])
   const [comments, setComments] = useState([])
   const [worklogs, setWorklogs] = useState([])
@@ -221,7 +223,7 @@ export default function IssueDetail({ issue, projectId }) {
       upsertIssue(updated)
       setEditOpen(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }
@@ -249,11 +251,11 @@ export default function IssueDetail({ issue, projectId }) {
   }
 
   async function handleDelete() {
-    if (!confirm(`Issue "${issue.title}" wirklich löschen?`)) return
+    if (!await showConfirm(`Issue "${issue.title}" wirklich löschen?`)) return
     let deleteSubtasks = false
     const subtaskCount = issue.subtasks_count || 0
     if (issue.type === 'story' && subtaskCount > 0) {
-      deleteSubtasks = confirm(`Diese Story hat ${subtaskCount} Unteraufgabe${subtaskCount !== 1 ? 'n' : ''}. Sollen diese ebenfalls gelöscht werden?`)
+      deleteSubtasks = await showConfirm(`Diese Story hat ${subtaskCount} Unteraufgabe${subtaskCount !== 1 ? 'n' : ''}. Sollen diese ebenfalls gelöscht werden?`)
     }
     await issuesApi.remove(issue.id, deleteSubtasks)
     removeIssue(issue.id)
@@ -494,14 +496,14 @@ export default function IssueDetail({ issue, projectId }) {
                       {canRevert && (
                         <button
                           onClick={async () => {
-                            if (!window.confirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
+                            if (!await showConfirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
                             try {
                               const { data: updated } = await issuesApi.revertActivity(issue.id, log.id)
                               upsertIssue(updated)
                               const { data } = await issuesApi.getActivity(issue.id)
                               setActivity(data)
                             } catch (err) {
-                              alert(err.response?.data?.error || 'Fehler beim Rückgängigmachen')
+                              showToast(err.response?.data?.error || 'Fehler beim Rückgängigmachen', 'error')
                             }
                           }}
                           title="Rückgängig machen"

@@ -13,6 +13,7 @@ import IssueList from '../components/issues/IssueList'
 import MiniCalendar from '../components/calendar/MiniCalendar'
 import IssueForm from '../components/issues/IssueForm'
 import Modal from '../components/common/Modal'
+import { useToastStore } from '../store/toastStore'
 
 const ICLOUD_STATUS = {
   ok:    { dot: 'bg-green-500', pill: 'bg-green-50 text-green-700 border-green-200', label: 'iCloud ✓' },
@@ -37,6 +38,7 @@ export default function CalendarPage() {
   const { projectId } = useParams()
   const id = parseInt(projectId)
   const navigate = useNavigate()
+  const { showToast } = useToastStore()
 
   const { issues, setIssues, upsertIssue } = useIssueStore()
   const { icloudEvents, icloudConfigured, setIcloudEvents, setIcloudConfigured } = useCalendarStore()
@@ -213,7 +215,7 @@ export default function CalendarPage() {
       upsertIssue(issue)
       setShowNewIssue(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Erstellen')
+      showToast(err.response?.data?.error || 'Fehler beim Erstellen', 'error')
     } finally {
       setSaving(false)
     }

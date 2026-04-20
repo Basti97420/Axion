@@ -8,6 +8,7 @@ import IssueList from '../components/issues/IssueList'
 import IssueDetail from '../components/issues/IssueDetail'
 import IssueForm from '../components/issues/IssueForm'
 import Modal from '../components/common/Modal'
+import { useToastStore } from '../store/toastStore'
 
 export default function IssuePage() {
   const { projectId, issueId } = useParams()
@@ -18,6 +19,7 @@ export default function IssuePage() {
   const { setIssues, upsertIssue, setCurrentIssue } = useIssueStore()
   const currentIssue = useIssueStore((s) => s.currentIssue)
 
+  const { showToast } = useToastStore()
   const [filters, setFilters] = useState({})
   const [showNewIssue, setShowNewIssue] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -42,7 +44,7 @@ export default function IssuePage() {
       upsertIssue(issue)
       setShowNewIssue(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Erstellen')
+      showToast(err.response?.data?.error || 'Fehler beim Erstellen', 'error')
     } finally {
       setSaving(false)
     }

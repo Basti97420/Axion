@@ -3,9 +3,11 @@ import { NavLink, useNavigate, useParams } from 'react-router-dom'
 import { wikiApi } from '../../api/wikiApi'
 import ContextMenu from '../common/ContextMenu'
 import KnowledgeGraph from './KnowledgeGraph'
+import { useToastStore } from '../../store/toastStore'
 
 function TreeNode({ page, level = 0, onDeleted, onNewChild }) {
   const navigate = useNavigate()
+  const { showToast, showConfirm } = useToastStore()
   const [open, setOpen] = useState(false)
   const [children, setChildren] = useState([])
   const [menu, setMenu] = useState(null)
@@ -36,12 +38,12 @@ function TreeNode({ page, level = 0, onDeleted, onNewChild }) {
         {
           icon: '🗑', label: 'Löschen', danger: true,
           onClick: async () => {
-            if (!confirm(`Knowledge-Seite „${page.title}" wirklich löschen?`)) return
+            if (!await showConfirm(`Knowledge-Seite „${page.title}" wirklich löschen?`)) return
             try {
               await wikiApi.deletePage(page.slug)
               onDeleted?.(page.slug)
             } catch (err) {
-              alert(err.response?.data?.error || 'Löschen fehlgeschlagen')
+              showToast(err.response?.data?.error || 'Löschen fehlgeschlagen', 'error')
             }
           },
         },

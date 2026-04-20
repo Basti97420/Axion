@@ -5,6 +5,7 @@ import { issuesApi } from '../../api/issuesApi'
 import { useAuthStore } from '../../store/authStore'
 import { useIssueStore } from '../../store/issueStore'
 import { formatDateTime } from '../../utils/dateUtils'
+import { useToastStore } from '../../store/toastStore'
 
 const REVERTABLE = new Set(['updated', 'status_changed', 'field_changed', 'ki_update', 'reverted'])
 
@@ -44,6 +45,7 @@ export default function ActivityFeed({ projectId }) {
   const user = useAuthStore((s) => s.user)
   const isAdmin = user?.is_admin
   const upsertIssue = useIssueStore((s) => s.upsertIssue)
+  const { showToast, showConfirm } = useToastStore()
 
   function loadLog() {
     setLoading(true)
@@ -56,13 +58,13 @@ export default function ActivityFeed({ projectId }) {
   useEffect(() => { loadLog() }, [projectId])
 
   async function handleRevert(log) {
-    if (!window.confirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
+    if (!await showConfirm(`„${log.field_changed}" auf „${log.old_value}" zurücksetzen?`)) return
     try {
       const { data } = await issuesApi.revertActivity(log.issue_id, log.id)
       upsertIssue(data)
       loadLog()
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Rückgängigmachen')
+      showToast(err.response?.data?.error || 'Fehler beim Rückgängigmachen', 'error')
     }
   }
 

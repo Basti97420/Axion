@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown'
 import { kiAgentsApi } from '../api/kiAgentsApi'
 import { formatDateTime } from '../utils/dateUtils'
 import Button from '../components/common/Button'
+import { useToastStore } from '../store/toastStore'
 
 const TEMPLATES = [
   {
@@ -306,6 +307,7 @@ function ModelConfigForm({ agent, onSave }) {
 }
 
 function FileList({ agentId, refreshKey }) {
+  const { showConfirm } = useToastStore()
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState({})
   const [previewContent, setPreviewContent] = useState({})
@@ -333,7 +335,7 @@ function FileList({ agentId, refreshKey }) {
   }
 
   async function handleDelete(filename) {
-    if (!confirm(`Datei "${filename}" wirklich löschen?`)) return
+    if (!await showConfirm(`Datei "${filename}" wirklich löschen?`)) return
     await kiAgentsApi.deleteFile(agentId, filename)
     setFiles((f) => f.filter((x) => x.filename !== filename))
     setPreviews((p) => ({ ...p, [filename]: false }))
@@ -594,6 +596,7 @@ const TABS = [
 
 export default function KiAgentsPage() {
   const { projectId } = useParams()
+  const { showConfirm } = useToastStore()
   const [agents, setAgents] = useState([])
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
@@ -637,7 +640,7 @@ export default function KiAgentsPage() {
   }
 
   async function handleDelete() {
-    if (!confirm(`Agent "${selected.name}" wirklich löschen?`)) return
+    if (!await showConfirm(`Agent "${selected.name}" wirklich löschen?`)) return
     await kiAgentsApi.remove(selected.id)
     setAgents((a) => a.filter((ag) => ag.id !== selected.id))
     setSelected(null)

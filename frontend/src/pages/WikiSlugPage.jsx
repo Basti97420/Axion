@@ -4,10 +4,12 @@ import WikiTree from '../components/wiki/WikiTree'
 import WikiPage from '../components/wiki/WikiPage'
 import WikiEditor from '../components/wiki/WikiEditor'
 import { wikiApi } from '../api/wikiApi'
+import { useToastStore } from '../store/toastStore'
 
 export default function WikiSlugPage() {
   const { slug } = useParams()
   const navigate = useNavigate()
+  const { showToast, showConfirm } = useToastStore()
   const [page, setPage] = useState(null)
   const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -34,14 +36,14 @@ export default function WikiSlugPage() {
       setPage(updated)
       setEditing(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }
   }
 
   async function handleDelete() {
-    if (!confirm(`Seite "${page.title}" wirklich löschen?`)) return
+    if (!await showConfirm(`Seite "${page.title}" wirklich löschen?`)) return
     await wikiApi.deletePage(slug)
     setTreeKey((k) => k + 1)
     navigate('/knowledge')
@@ -55,7 +57,7 @@ export default function WikiSlugPage() {
       setTreeKey((k) => k + 1)
       navigate(`/knowledge/${newPage.slug}`)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }

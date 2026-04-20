@@ -6,10 +6,12 @@ import { python } from '@codemirror/lang-python'
 import { pythonScriptsApi } from '../api/pythonScriptsApi'
 import { formatDateTime } from '../utils/dateUtils'
 import Button from '../components/common/Button'
+import { useToastStore } from '../store/toastStore'
 
 const FIELD_CLASSES = 'border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 w-full'
 
 function PyDropZone({ code, onChange }) {
+  const { showConfirm } = useToastStore()
   const [isDragging, setIsDragging] = useState(false)
   const [dropError, setDropError] = useState('')
 
@@ -19,7 +21,7 @@ function PyDropZone({ code, onChange }) {
   function handleDragLeave(e) {
     if (!e.currentTarget.contains(e.relatedTarget)) setIsDragging(false)
   }
-  function handleDrop(e) {
+  async function handleDrop(e) {
     e.preventDefault()
     setIsDragging(false)
     setDropError('')
@@ -30,7 +32,7 @@ function PyDropZone({ code, onChange }) {
       setTimeout(() => setDropError(''), 3000)
       return
     }
-    if (code.trim() && !confirm('Aktuellen Code durch die importierte Datei ersetzen?')) return
+    if (code.trim() && !await showConfirm('Aktuellen Code durch die importierte Datei ersetzen?')) return
     const reader = new FileReader()
     reader.onload = (ev) => onChange(ev.target.result)
     reader.readAsText(file)
@@ -785,6 +787,7 @@ function RunList({ runs }) {
 // Haupt-Seite
 // ---------------------------------------------------------------------------
 function FileList({ scriptId }) {
+  const { showConfirm } = useToastStore()
   const [files, setFiles] = useState([])
   const [previews, setPreviews] = useState({})
   const [previewContent, setPreviewContent] = useState({})
@@ -811,7 +814,7 @@ function FileList({ scriptId }) {
   }
 
   async function handleDelete(fn) {
-    if (!confirm(`"${fn}" wirklich löschen?`)) return
+    if (!await showConfirm(`"${fn}" wirklich löschen?`)) return
     await pythonScriptsApi.deleteFile(scriptId, fn)
     setFiles((f) => f.filter((x) => x.filename !== fn))
     setPreviews((p) => ({ ...p, [fn]: false }))
@@ -910,6 +913,7 @@ const TABS = [
 
 export default function PythonScriptsPage() {
   const { projectId } = useParams()
+  const { showConfirm } = useToastStore()
   const [scripts, setScripts] = useState([])
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
@@ -970,7 +974,7 @@ export default function PythonScriptsPage() {
   }
 
   async function handleDelete() {
-    if (!confirm(`Script "${selected.name}" wirklich löschen?`)) return
+    if (!await showConfirm(`Script "${selected.name}" wirklich löschen?`)) return
     await pythonScriptsApi.remove(selected.id)
     setScripts((s) => s.filter((sc) => sc.id !== selected.id))
     setSelected(null)

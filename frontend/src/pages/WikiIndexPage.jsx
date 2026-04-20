@@ -3,9 +3,11 @@ import { useNavigate } from 'react-router-dom'
 import WikiTree from '../components/wiki/WikiTree'
 import WikiEditor from '../components/wiki/WikiEditor'
 import { wikiApi } from '../api/wikiApi'
+import { useToastStore } from '../store/toastStore'
 
 export default function WikiIndexPage() {
   const navigate = useNavigate()
+  const { showToast } = useToastStore()
   const [creating, setCreating] = useState(false)
   const [saving, setSaving] = useState(false)
   const [treeKey, setTreeKey] = useState(0)
@@ -18,7 +20,7 @@ export default function WikiIndexPage() {
       setTreeKey((k) => k + 1) // refresh tree
       navigate(`/knowledge/${page.slug}`)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler')
+      showToast(err.response?.data?.error || 'Fehler', 'error')
     } finally {
       setSaving(false)
     }

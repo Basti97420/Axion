@@ -3,6 +3,8 @@ import { useEffect, useState, useRef } from 'react'
 import Navbar from './Navbar'
 import Sidebar from './Sidebar'
 import AiChatPanel from '../ai/AiChatPanel'
+import Toast from './Toast'
+import ConfirmDialog from './ConfirmDialog'
 import { projectsApi } from '../../api/projectsApi'
 import { useProjectStore } from '../../store/projectStore'
 import { userSettingsApi } from '../../api/userSettingsApi'
@@ -93,6 +95,8 @@ export default function Layout() {
       </div>
       <AiChatPanel />
       <GlobalDragOverlay />
+      <Toast />
+      <ConfirmDialog />
     </div>
   )
 }

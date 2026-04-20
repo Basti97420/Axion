@@ -9,6 +9,7 @@ import { issuesApi } from '../../api/issuesApi'
 import { milestonesApi } from '../../api/milestonesApi'
 import { useAuthStore } from '../../store/authStore'
 import { useIssueStore } from '../../store/issueStore'
+import { useToastStore } from '../../store/toastStore'
 
 const PRIORITY_ORDER = ['low', 'medium', 'high', 'critical']
 const PRIORITY_ICONS_MAP = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' }
@@ -17,6 +18,7 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
   const navigate = useNavigate()
   const user = useAuthStore((s) => s.user)
   const { upsertIssue, removeIssue } = useIssueStore()
+  const { showConfirm } = useToastStore()
   const [menu, setMenu] = useState(null)
   const [milestones, setMilestones] = useState([])
 
@@ -130,7 +132,7 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
         {
           icon: '🗑', label: 'Löschen', danger: true,
           onClick: async () => {
-            if (!confirm(`Issue „${issue.title}" wirklich löschen?`)) return
+            if (!await showConfirm(`Issue „${issue.title}" wirklich löschen?`)) return
             try {
               await issuesApi.remove(issue.id)
               removeIssue(issue.id)

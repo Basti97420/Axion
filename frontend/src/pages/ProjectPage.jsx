@@ -10,6 +10,7 @@ import IssueForm from '../components/issues/IssueForm'
 import Modal from '../components/common/Modal'
 import ActivityFeed from '../components/project/ActivityFeed'
 import MilestoneList from '../components/project/MilestoneList'
+import { useToastStore } from '../store/toastStore'
 
 export default function ProjectPage() {
   const { projectId } = useParams()
@@ -21,6 +22,7 @@ export default function ProjectPage() {
   const { setIssues, upsertIssue } = useIssueStore()
   const currentIssue = useIssueStore((s) => s.currentIssue)
 
+  const { showToast } = useToastStore()
   const [searchParams] = useSearchParams()
   const [filters, setFilters] = useState({})
   const view = searchParams.get('view') || 'kanban'
@@ -70,7 +72,7 @@ export default function ProjectPage() {
       upsertIssue(issue)
       setShowNewIssue(false)
     } catch (err) {
-      alert(err.response?.data?.error || 'Fehler beim Erstellen')
+      showToast(err.response?.data?.error || 'Fehler beim Erstellen', 'error')
     } finally {
       setSaving(false)
     }
