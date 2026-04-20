@@ -6,14 +6,22 @@ def _resolve_wiki_links(content: str) -> str:
     """Replace [[Page Title]] with HTML links. Red if page doesn't exist."""
     def replace_link(match):
         title = match.group(1).strip()
-        from slugify import slugify
-        slug = slugify(title)
         from app.models.wiki_page import WikiPage
-        page = WikiPage.query.filter_by(slug=slug).first()
+        from app import db
+        # Erst nach Titel suchen (case-insensitive) → verwendet den echten gespeicherten Slug
+        page = WikiPage.query.filter(
+            db.func.lower(WikiPage.title) == title.lower()
+        ).first()
+        # Fallback: per slugify (Rückwärtskompatibilität)
+        if not page:
+            from slugify import slugify
+            page = WikiPage.query.filter_by(slug=slugify(title)).first()
         if page:
-            return f'<a href="/knowledge/{slug}" class="wiki-link">{title}</a>'
+            return f'<a href="/knowledge/{page.slug}" class="wiki-link">{title}</a>'
         else:
-            return f'<a href="/knowledge/{slug}" class="wiki-link wiki-link-new" title="Seite existiert noch nicht">{title}</a>'
+            from slugify import slugify
+            fallback_slug = slugify(title)
+            return f'<a href="/knowledge/{fallback_slug}" class="wiki-link wiki-link-new" title="Seite existiert noch nicht">{title}</a>'
     return re.sub(r'\[\[(.+?)\]\]', replace_link, content)
 
 
