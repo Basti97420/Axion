@@ -376,11 +376,11 @@ export default function UserSettingsPage() {
           </div>
 
           <div className="flex gap-3 text-xs">
-            <a href="/wiki/api-referenz" target="_blank" rel="noreferrer"
+            <a href="/knowledge/api-referenz" target="_blank" rel="noreferrer"
                className="text-primary-600 hover:underline">📖 API-Referenz</a>
-            <a href="/wiki/axion-python-bibliothek" target="_blank" rel="noreferrer"
+            <a href="/knowledge/axion-python-bibliothek" target="_blank" rel="noreferrer"
                className="text-primary-600 hover:underline">📖 Axion Library Docs</a>
-            <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
+            <a href="/knowledge/ki-agenten-aktionen" target="_blank" rel="noreferrer"
                className="text-primary-600 hover:underline">📖 Ki Agenten Aktionen</a>
           </div>
 
@@ -544,7 +544,7 @@ export default function UserSettingsPage() {
           <section className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-5 py-4 border-b border-gray-100">
               <h2 className="text-sm font-semibold text-gray-800">Automatisches Backup</h2>
-              <p className="text-xs text-gray-500 mt-0.5">Regelmäßige Sicherung der Datenbank und Wiki-Anhänge auf dem Server</p>
+              <p className="text-xs text-gray-500 mt-0.5">Regelmäßige Sicherung der Datenbank und Knowledge-Anhänge auf dem Server</p>
             </div>
             {!backupForm ? <div className="px-5 py-6 text-sm text-gray-400">Lädt…</div> : (
               <div className="px-5 py-5 space-y-5">

@@ -630,7 +630,7 @@ function ScriptForm({ script, onSave, onDelete, onRun, running, onRunCell, cellR
           <div>
             <p className="text-sm font-semibold text-gray-700">✏️ Code</p>
             <p className="text-xs text-gray-400 mt-0.5">
-              <a href="/wiki/axion-python-bibliothek" target="_blank" rel="noreferrer"
+              <a href="/knowledge/axion-python-bibliothek" target="_blank" rel="noreferrer"
                  className="text-primary-600 hover:underline">📖 Axion Library Docs</a>
             </p>
           </div>
@@ -660,7 +660,7 @@ function ScriptForm({ script, onSave, onDelete, onRun, running, onRunCell, cellR
             <PyDropZone code={form.code} onChange={(val) => set('code', val)} />
             <p className="text-xs text-gray-400 mt-1">
               Verfügbar: <code className="bg-gray-100 px-1 rounded">import axion</code> für Projekt-Zugriff
-              (Issues, Wiki, Workspaces) · <span className="text-gray-400">.py-Datei auf den Editor ziehen zum Importieren</span>
+              (Issues, Knowledge, Workspaces) · <span className="text-gray-400">.py-Datei auf den Editor ziehen zum Importieren</span>
             </p>
           </>
         )}

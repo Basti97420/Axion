@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import MDEditor, { commands } from '@uiw/react-md-editor'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
@@ -15,6 +15,16 @@ const tableCommand = {
     api.replaceSelection(
       '\n| Spalte 1 | Spalte 2 | Spalte 3 |\n| --- | --- | --- |\n| Zelle 1 | Zelle 2 | Zelle 3 |\n'
     )
+  },
+}
+
+const linkCommand = {
+  name: 'wiki-link',
+  keyCommand: 'wiki-link',
+  buttonProps: { title: '[[Knowledge-Link]]', 'aria-label': 'Knowledge-Link einfügen' },
+  icon: <span style={{ fontSize: 12, whiteSpace: 'nowrap' }}>[[]]</span>,
+  execute(_state, api) {
+    api.replaceSelection('[[')
   },
 }
 
@@ -49,6 +59,57 @@ export default function WikiEditor({ initial, onSave, onCancel, loading, slug })
   const [isDragging, setIsDragging] = useState(false)
   const [uploading, setUploading] = useState(false)
   const editorRef = useRef(null)
+
+  // Autocomplete-State
+  const [allPages, setAllPages] = useState([])
+  const [acVisible, setAcVisible] = useState(false)
+  const [acQuery, setAcQuery] = useState('')
+  const [acResults, setAcResults] = useState([])
+  const [acIndex, setAcIndex] = useState(0)
+
+  // Seiten einmalig laden für Autocomplete
+  useEffect(() => {
+    wikiApi.listPages({})
+      .then(({ data }) => setAllPages(data))
+      .catch(() => {})
+  }, [])
+
+  // Beim Tippen prüfen ob [[… aktiv ist
+  function handleContentChange(value = '') {
+    setContent(value)
+
+    // Suche letztes nicht-geschlossenes [[ im Text
+    const match = value.match(/\[\[([^\][\n]{0,80})$/)
+    if (match) {
+      const query = match[1]
+      setAcQuery(query)
+      const results = allPages
+        .filter((p) => p.title.toLowerCase().includes(query.toLowerCase()))
+        .slice(0, 8)
+      setAcResults(results)
+      setAcVisible(results.length > 0 || query.length === 0)
+      setAcIndex(0)
+    } else {
+      setAcVisible(false)
+    }
+  }
+
+  // Seite aus Autocomplete einfügen
+  const insertLink = useCallback((page) => {
+    // Ersetze das offene [[ + Suchbegriff durch [[Titel]]
+    const updated = content.replace(/\[\[([^\][\n]{0,80})$/, `[[${page.title}]]`)
+    setContent(updated)
+    setAcVisible(false)
+  }, [content])
+
+  // Tastaturnavigation im Dropdown
+  function handleEditorKeyDown(e) {
+    if (!acVisible) return
+    if (e.key === 'ArrowDown') { e.preventDefault(); setAcIndex((i) => Math.min(i + 1, acResults.length - 1)) }
+    if (e.key === 'ArrowUp')   { e.preventDefault(); setAcIndex((i) => Math.max(i - 1, 0)) }
+    if (e.key === 'Enter' && acResults[acIndex]) { e.preventDefault(); insertLink(acResults[acIndex]) }
+    if (e.key === 'Escape') { setAcVisible(false) }
+  }
 
   function handleSubmit(e) {
     e.preventDefault()
@@ -91,6 +152,7 @@ export default function WikiEditor({ initial, onSave, onCancel, loading, slug })
   const extraCommands = [
     commands.divider,
     tableCommand,
+    linkCommand,
     ...(slug ? [makeImageCommand(slug)] : []),
   ]
 
@@ -104,31 +166,56 @@ export default function WikiEditor({ initial, onSave, onCancel, loading, slug })
         className="border border-gray-300 rounded-lg px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-primary-500"
       />
 
-      <div
-        ref={editorRef}
-        className={`flex-1 min-h-0 rounded-lg transition-all ${isDragging ? 'ring-2 ring-primary-400' : ''}`}
-        data-color-mode="light"
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-      >
-        {isDragging && (
-          <div className="absolute inset-0 bg-primary-50/80 rounded-lg flex items-center justify-center z-10 pointer-events-none">
-            <p className="text-primary-600 font-medium text-sm">⬇ Datei loslassen – wird als Anhang eingefügt</p>
+      <div className="relative flex-1 min-h-0">
+        <div
+          ref={editorRef}
+          className={`flex-1 min-h-0 h-full rounded-lg transition-all ${isDragging ? 'ring-2 ring-primary-400' : ''}`}
+          data-color-mode="light"
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onKeyDown={handleEditorKeyDown}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 bg-primary-50/80 rounded-lg flex items-center justify-center z-10 pointer-events-none">
+              <p className="text-primary-600 font-medium text-sm">⬇ Datei loslassen – wird als Anhang eingefügt</p>
+            </div>
+          )}
+          <MDEditor
+            value={content}
+            onChange={handleContentChange}
+            height="100%"
+            preview="live"
+            visibleDragbar={false}
+            previewOptions={{
+              remarkPlugins: [[remarkMath]],
+              rehypePlugins: [[rehypeKatex]],
+            }}
+            extraCommands={extraCommands}
+          />
+        </div>
+
+        {/* [[Seitenname]]-Autocomplete-Dropdown */}
+        {acVisible && acResults.length > 0 && (
+          <div className="absolute bottom-2 left-2 z-50 bg-white border border-gray-200 rounded-xl shadow-xl py-1 w-72 max-h-56 overflow-y-auto">
+            <div className="px-3 py-1 text-xs text-gray-400 border-b border-gray-100 mb-1">
+              Knowledge-Link einfügen
+            </div>
+            {acResults.map((page, i) => (
+              <button
+                key={page.slug}
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); insertLink(page) }}
+                className={`w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2 ${
+                  i === acIndex ? 'bg-primary-50 text-primary-700' : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <span className="text-gray-400 text-xs">📄</span>
+                <span className="truncate">{page.title}</span>
+              </button>
+            ))}
           </div>
         )}
-        <MDEditor
-          value={content}
-          onChange={setContent}
-          height="100%"
-          preview="live"
-          visibleDragbar={false}
-          previewOptions={{
-            remarkPlugins: [[remarkMath]],
-            rehypePlugins: [[rehypeKatex]],
-          }}
-          extraCommands={extraCommands}
-        />
       </div>
 
       {uploading && (

@@ -69,8 +69,8 @@ export default function AiChatPanel() {
       case 'issue_updated':     return `✓ Issue #${r.issue_id} aktualisiert`
       case 'comment_added':     return `✓ Kommentar zu Issue #${r.issue_id}`
       case 'create_issue':      return `✓ Issue #${r.issue_id} erstellt: „${r.title}"`
-      case 'wiki_page_created': return `✓ Wiki-Seite „${r.title}" erstellt`
-      case 'wiki_page_updated': return `✓ Wiki-Seite „${r.title}" aktualisiert`
+      case 'wiki_page_created': return `✓ Knowledge-Seite „${r.title}" erstellt`
+      case 'wiki_page_updated': return `✓ Knowledge-Seite „${r.title}" aktualisiert`
       case 'worklog_added':     return `✓ ${r.hours}h auf Issue #${r.issue_id} erfasst`
       case 'milestone_created': return `✓ Meilenstein „${r.name}" erstellt`
       case 'dependency_set':    return `✓ Issue #${r.issue_id} blockiert #${r.blocks}`
@@ -108,7 +108,7 @@ export default function AiChatPanel() {
           <div className="flex-1" />
           {(projectId || issueId || wikiSlug) && (
             <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-              {issueId ? `Issue #${issueId}` : wikiSlug ? `Wiki: ${wikiSlug}` : `Projekt ${projectId}`}
+              {issueId ? `Issue #${issueId}` : wikiSlug ? `Knowledge: ${wikiSlug}` :`Projekt ${projectId}`}
             </span>
           )}
           <button

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import Button from '../common/Button'
@@ -6,6 +7,7 @@ import { wikiApi } from '../../api/wikiApi'
 import { formatDateTime } from '../../utils/dateUtils'
 
 export default function WikiPage({ page, onEdit, onDelete }) {
+  const navigate = useNavigate()
   const [uploading, setUploading] = useState(false)
   const [attachments, setAttachments] = useState(page.attachments || [])
   const contentRef = useRef(null)
@@ -74,6 +76,12 @@ export default function WikiPage({ page, onEdit, onDelete }) {
         ref={contentRef}
         className="prose prose-sm max-w-none mb-8"
         dangerouslySetInnerHTML={{ __html: page.rendered || '' }}
+        onClick={(e) => {
+          const a = e.target.closest('a.wiki-link')
+          if (!a) return
+          e.preventDefault()
+          navigate(new URL(a.href, window.location.origin).pathname)
+        }}
       />
 
       {/* Attachments */}

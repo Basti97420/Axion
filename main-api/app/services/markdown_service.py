@@ -11,9 +11,9 @@ def _resolve_wiki_links(content: str) -> str:
         from app.models.wiki_page import WikiPage
         page = WikiPage.query.filter_by(slug=slug).first()
         if page:
-            return f'<a href="/wiki/{slug}" class="wiki-link">{title}</a>'
+            return f'<a href="/knowledge/{slug}" class="wiki-link">{title}</a>'
         else:
-            return f'<a href="/wiki/{slug}" class="wiki-link wiki-link-new" title="Seite existiert noch nicht">{title}</a>'
+            return f'<a href="/knowledge/{slug}" class="wiki-link wiki-link-new" title="Seite existiert noch nicht">{title}</a>'
     return re.sub(r'\[\[(.+?)\]\]', replace_link, content)
 
 

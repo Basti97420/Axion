@@ -9,7 +9,7 @@ Axion ist ein Monolith — alles in einem Flask-Backend:
 | main-api | 5050 | `main-api/` | Flask: Issues, Projekte, Wiki, Kalender, iCloud-Sync, KI |
 | frontend | 5173 | `frontend/` | Vite + React |
 
-Wiki und iCloud-Kalender-Sync sind direkt in `main-api` integriert (`app/routes/wiki.py`, `app/routes/calendar_sync.py`).
+Wiki und iCloud-Kalender-Sync sind direkt in `main-api` integriert (`app/routes/wiki.py (URL-Prefix: /api/knowledge)`, `app/routes/calendar_sync.py`).
 
 ## Services starten
 
@@ -138,7 +138,7 @@ main-api/
 frontend/src/
   api/               # Axios-Wrapper pro Service
     client.js        # Axios-Basis (http://localhost:5050/api)
-    wikiApi.js       # Wiki: /api/wiki/* (via main-api)
+    wikiApi.js       # Knowledge: /api/knowledge/* (via main-api)
     aiApi.js         # KI: getStatus(), chat()
     pythonScriptsApi.js  # getAll(), create(), get(), update(), remove(), run(), runCells(), getRuns()
     kiAgentsApi.js   # getAll(), create(), get(), update(), remove(), run(), getRuns(), getFiles(), deleteFile()
@@ -149,7 +149,7 @@ frontend/src/
     common/          # Layout, Navbar (mit Suchfeld ⌘K), Modal, PasswordModal, etc.
     kanban/          # KanbanBoard, KanbanColumn, KanbanCard
     calendar/        # CalendarView (FullCalendar)
-    wiki/            # WikiTree, WikiPage, WikiEditor
+    wiki/            # WikiTree, WikiEditor, WikiPage, KnowledgeGraph (Graph-Overlay), WikiPage, WikiEditor
     issues/          # IssueCard, IssueDetail, IssueForm (mit Vorlagen-Pills), etc.
     project/         # ActivityFeed, MilestoneList
     ai/              # AiChatPanel (festes rechtes Panel, z-50)
@@ -354,7 +354,7 @@ Falls sich geändert hat:
 
 - **Zwei Drag-Systeme**: FullCalendar-Drag (für Kalender-Einträge) und HTML5-native-Drag (für Milestone-Drop) können auf der gleichen Seite koexistieren; `nativeDraggable` Prop auf IssueCard steuert welches aktiv ist
 - **iCloud-Sync**: Graceful Degradation – iCloud-Fehler brechen lokale Funktionen nicht ab
-- **Wiki in main-api**: Wiki-Routen unter `/api/wiki/*` direkt in main-api (`app/routes/wiki.py`, `app/routes/wiki_attachments.py`). Modelle: `WikiPage`, `WikiAttachment` in `app/models/`. Frontend: `wikiApi.js` mit `withCredentials: true`
+- **Wiki in main-api**: Wiki-Routen unter `/api/knowledge/*` direkt in main-api (`app/routes/wiki.py (URL-Prefix: /api/knowledge)`, `app/routes/wiki_attachments.py`). Modelle: `WikiPage`, `WikiAttachment` in `app/models/`. Frontend: `wikiApi.js` mit `withCredentials: true`
 - **Kalender-Sync in main-api**: `/api/calendar/*` via `app/routes/calendar_sync.py`, Services `icloud_client.py` + `event_mapper.py` in `app/services/`
 - **Kanban DnD**: Verwendet ausschließlich `useDraggable` + `useDroppable` aus `@dnd-kit/core` — kein `SortableContext`/`useSortable`, da cross-column Drag damit fehlschlägt. `DragOverlay` rendert inline-div (kein `KanbanCard`), um doppelte ID-Registrierung zu vermeiden.
 - **IssueDetail Tab-Layout**: Alle Tab-Inhalte (activity, comments, worklog, attachments) müssen im `max-w-3xl mx-auto p-6`-Container liegen — der schließende `</div>` kommt erst nach dem letzten Tab-Block, nicht nach comments.

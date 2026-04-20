@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 const client = axios.create({
-  baseURL: '/api/wiki',
+  baseURL: '/api/knowledge',
   withCredentials: true,  // main-api hat @login_required auf Wiki-Routen
 })
 
@@ -19,6 +19,7 @@ export const wikiApi = {
     fd.append('file', file)
     return client.post(`/pages/${slug}/attachments`, fd)
   },
-  getAttachmentUrl: (id) => `/api/wiki/attachments/${id}`,
+  getGraph: () => client.get('/graph'),
+  getAttachmentUrl: (id) => `/api/knowledge/attachments/${id}`,
   deleteAttachment: (id) => client.delete(`/attachments/${id}`),
 }

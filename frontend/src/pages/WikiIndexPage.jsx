@@ -16,7 +16,7 @@ export default function WikiIndexPage() {
       const { data: page } = await wikiApi.createPage(data)
       setCreating(false)
       setTreeKey((k) => k + 1) // refresh tree
-      navigate(`/wiki/${page.slug}`)
+      navigate(`/knowledge/${page.slug}`)
     } catch (err) {
       alert(err.response?.data?.error || 'Fehler')
     } finally {
@@ -33,7 +33,7 @@ export default function WikiIndexPage() {
       <div className="flex-1 overflow-y-auto p-6">
         {creating ? (
           <div className="max-w-4xl mx-auto h-full flex flex-col">
-            <h1 className="text-xl font-bold text-gray-900 mb-4">Neue Wiki-Seite</h1>
+            <h1 className="text-xl font-bold text-gray-900 mb-4">Neue Knowledge-Seite</h1>
             <div className="flex-1 min-h-0">
               <WikiEditor
                 onSave={handleCreate}
@@ -45,7 +45,7 @@ export default function WikiIndexPage() {
         ) : (
           <div className="max-w-2xl mx-auto text-center mt-20">
             <div className="text-4xl mb-4">📖</div>
-            <h2 className="text-xl font-semibold text-gray-700 mb-2">Wiki</h2>
+            <h2 className="text-xl font-semibold text-gray-700 mb-2">Knowledge</h2>
             <p className="text-sm text-gray-500 mb-6">
               Wähle eine Seite aus der Seitenleiste oder erstelle eine neue.
             </p>

@@ -41,9 +41,9 @@ function GlobalDragOverlay() {
   function hint() {
     const p = location.pathname
     if (p.match(/\/issues\/\d+/))  return '📎 Datei auf dem Issue ablegen zum Hochladen'
-    if (p.match(/\/wiki\//))       return '🖼 Datei im Wiki-Editor ablegen zum Einbetten'
+    if (p.match(/\/knowledge\//))  return '🖼 Datei im Knowledge-Editor ablegen zum Einbetten'
     if (p.match(/\/python-scripts/)) return '🐍 .py-Datei auf den Editor ziehen zum Importieren'
-    return '📁 Navigiere zu einem Issue oder Wiki, um Dateien hochzuladen'
+    return '📁 Navigiere zu einem Issue oder Knowledge, um Dateien hochzuladen'
   }
 
   if (!visible) return null

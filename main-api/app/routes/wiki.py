@@ -5,7 +5,7 @@ from app import db
 from app.models.wiki_page import WikiPage
 from app.services import markdown_service, wiki_search_service
 
-bp = Blueprint('wiki', __name__, url_prefix='/api/wiki')
+bp = Blueprint('wiki', __name__, url_prefix='/api/knowledge')
 
 
 @bp.get('/pages')
@@ -108,3 +108,26 @@ def search():
 def render_preview():
     content = request.args.get('content', '')
     return jsonify({'html': markdown_service.render(content)})
+
+
+@bp.get('/graph')
+@login_required
+def get_graph():
+    import re
+    pages = WikiPage.query.all()
+    link_pattern = re.compile(r'\[\[(.+?)\]\]')
+    slug_map = {p.title.lower(): p.slug for p in pages}
+
+    nodes = [{'id': p.slug, 'title': p.title} for p in pages]
+    links = []
+    seen = set()
+    for page in pages:
+        for match in link_pattern.finditer(page.content or ''):
+            target_title = match.group(1).strip().lower()
+            if target_title in slug_map and slug_map[target_title] != page.slug:
+                key = (page.slug, slug_map[target_title])
+                if key not in seen:
+                    seen.add(key)
+                    links.append({'source': page.slug, 'target': slug_map[target_title]})
+
+    return jsonify({'nodes': nodes, 'links': links})

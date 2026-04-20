@@ -36,8 +36,8 @@ export default function App() {
         <Route path="projects/:projectId/calendar" element={<CalendarPage />} />
         <Route path="projects/:projectId/ki-agents" element={<KiAgentsPage />} />
         <Route path="projects/:projectId/python-scripts" element={<PythonScriptsPage />} />
-        <Route path="wiki" element={<WikiIndexPage />} />
-        <Route path="wiki/:slug" element={<WikiSlugPage />} />
+        <Route path="knowledge" element={<WikiIndexPage />} />
+        <Route path="knowledge/:slug" element={<WikiSlugPage />} />
         <Route path="admin/users" element={<AdminUsersPage />} />
         <Route path="settings" element={<UserSettingsPage />} />
       </Route>

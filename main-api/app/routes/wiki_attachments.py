@@ -7,7 +7,7 @@ from app import db
 from app.models.wiki_page import WikiPage
 from app.models.wiki_attachment import WikiAttachment
 
-bp = Blueprint('wiki_attachments', __name__, url_prefix='/api/wiki')
+bp = Blueprint('wiki_attachments', __name__, url_prefix='/api/knowledge')
 
 
 @bp.post('/pages/<slug>/attachments')

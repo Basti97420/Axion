@@ -144,13 +144,13 @@ export default function Navbar({ onToggleSidebar }) {
                 ))}
                 {results.wiki.length > 0 && (
                   <div className="px-3 pt-2 pb-1">
-                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Wiki</span>
+                    <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Knowledge</span>
                   </div>
                 )}
                 {results.wiki.map((page) => (
                   <button
                     key={page.slug}
-                    onMouseDown={() => navigate(`/wiki/${page.slug}`)}
+                    onMouseDown={() => navigate(`/knowledge/${page.slug}`)}
                     className="w-full text-left px-4 py-2 hover:bg-gray-50 text-sm"
                   >
                     <span className="font-medium">📄 {page.title}</span>

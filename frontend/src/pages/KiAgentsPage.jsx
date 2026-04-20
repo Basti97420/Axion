@@ -793,7 +793,7 @@ export default function KiAgentsPage() {
                           <p className="text-xs text-gray-400 mt-0.5">Auftrag des Agenten · wird beim Run eingelesen</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <a href="/wiki/ki-agenten-aktionen" target="_blank" rel="noreferrer"
+                          <a href="/knowledge/ki-agenten-aktionen" target="_blank" rel="noreferrer"
                              className="text-xs text-primary-600 hover:underline">📖 Aktionen</a>
                           <button
                             onClick={savePrompt}
