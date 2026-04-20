@@ -162,7 +162,7 @@ export default function KnowledgeGraph({ currentSlug, onClose }) {
   }, [currentSlug, navigate, onClose])
 
   return (
-    <div className="fixed inset-0 z-[9000] bg-gray-950/96 flex flex-col">
+    <div className="fixed inset-0 z-[9000] bg-gray-950 flex flex-col">
       {/* Header */}
       <div className="flex items-center justify-between px-5 py-3 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
