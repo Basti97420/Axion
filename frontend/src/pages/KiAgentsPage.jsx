@@ -596,7 +596,7 @@ const TABS = [
 
 export default function KiAgentsPage() {
   const { projectId } = useParams()
-  const { showConfirm } = useToastStore()
+  const { showConfirm, showToast } = useToastStore()
   const [agents, setAgents] = useState([])
   const [selected, setSelected] = useState(null)
   const [creating, setCreating] = useState(false)
@@ -608,9 +608,14 @@ export default function KiAgentsPage() {
   const [promptContent, setPromptContent] = useState('')
   const [promptDirty, setPromptDirty] = useState(false)
   const [promptSaving, setPromptSaving] = useState(false)
+  const [settingUp, setSettingUp] = useState(false)
+
+  function loadAgents() {
+    kiAgentsApi.getAll(projectId).then(({ data }) => setAgents(data)).catch(() => {})
+  }
 
   useEffect(() => {
-    kiAgentsApi.getAll(projectId).then(({ data }) => setAgents(data)).catch(() => {})
+    loadAgents()
   }, [projectId])
 
   useEffect(() => {
@@ -696,14 +701,40 @@ export default function KiAgentsPage() {
     setActiveTab('config')
   }
 
+  async function handleSetupStandard() {
+    const ok = await showConfirm(
+      '4 Standard-Agenten anlegen?\n\n• Bibliotekar (Sonntag 10:00 UTC)\n• Wochenbericht Freitag (17:00 UTC)\n• Wochenbericht Montag (08:00 UTC)\n• Issues-Betreuer (täglich 09:00 UTC)\n\nBereits vorhandene Agenten werden übersprungen.'
+    )
+    if (!ok) return
+    setSettingUp(true)
+    try {
+      const { data } = await kiAgentsApi.setupStandard(projectId)
+      const count = data.created.length
+      showToast(
+        count > 0
+          ? `${count} Standard-Agenten angelegt`
+          : 'Alle Standard-Agenten sind bereits vorhanden',
+        count > 0 ? 'success' : 'info'
+      )
+      loadAgents()
+    } catch {
+      showToast('Fehler beim Anlegen der Standard-Agenten', 'error')
+    } finally {
+      setSettingUp(false)
+    }
+  }
+
   const activeAgent = creating ? null : selected
 
   return (
     <div className="flex h-full overflow-hidden">
       {/* Linke Spalte: Agenten-Liste */}
       <div className="w-64 shrink-0 border-r border-gray-200 flex flex-col">
-        <div className="p-3 border-b border-gray-200">
+        <div className="p-3 border-b border-gray-200 flex flex-col gap-1.5">
           <Button size="sm" onClick={startCreate} className="w-full">+ Neuer Agent</Button>
+          <Button size="sm" variant="secondary" onClick={handleSetupStandard} loading={settingUp} className="w-full">
+            ⚡ Standard-Agenten
+          </Button>
         </div>
         <div className="flex-1 overflow-y-auto">
           {agents.length === 0 && (

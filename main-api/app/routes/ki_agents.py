@@ -1,12 +1,110 @@
 import json
 import os
 import threading
+from datetime import datetime, timedelta
 from flask import Blueprint, request, jsonify, send_file, current_app
 from flask_login import login_required
 from app import db
 from app.models.ki_agent import KiAgent, KiAgentRun
 
 bp = Blueprint('ki_agents', __name__)
+
+# ---------------------------------------------------------------------------
+# Standard-Agenten Prompts
+# ---------------------------------------------------------------------------
+
+_BIBLIOTEKAR_PROMPT = """Du bist der Bibliotekar für dieses Projekt. Deine Aufgabe ist die wöchentliche Pflege der Knowledge-Base.
+
+Führe folgende Schritte durch:
+1. Liste alle Knowledge-Seiten auf (list_wiki_pages).
+2. Lies jede Seite und suche nach [[Wiki-Links]] — prüfe, ob die Zielseite existiert.
+3. Finde Seiten, die von keiner anderen Seite verlinkt werden (verwaist).
+4. Erstelle oder aktualisiere die Seite "Bibliotheks-Status" mit:
+   - Geprüft am: {heutiges Datum}
+   - Seiten gesamt
+   - Defekte Links: Seite → fehlender Zielname
+   - Verwaiste Seiten (niemand verlinkt auf sie)
+   - Empfehlungen (fehlende Kategorien, unklare Titel, Duplikate)
+5. Sende eine kurze Zusammenfassung per Telegram.
+
+Wichtig: Ändere keine Seiteninhalte — nur den Bibliotheks-Status-Report."""
+
+_WOCHENBERICHT_FREITAG_PROMPT = """Du bist der Wochenbericht-Agent. Heute ist Freitag — erstelle den Wochenschluss-Bericht.
+
+Schritte:
+1. Suche Issues mit Status 'done' oder 'cancelled' (diese Woche abgeschlossen).
+2. Suche Issues, die diese Woche neu erstellt wurden.
+3. Prüfe offene Meilensteine und ihren Fortschritt.
+4. Identifiziere kritische oder überfällige Issues, die noch offen sind.
+5. Erstelle die Knowledge-Seite "Wochenbericht KW {KW}" (oder aktualisiere sie) mit:
+
+   ## ✅ Diese Woche erledigt
+   {Liste abgeschlossener Issues mit ID und Titel}
+
+   ## 🆕 Neu erstellt
+   {Liste neuer Issues}
+
+   ## 📊 Meilenstein-Fortschritt
+   {Offene Meilensteine, wie viele Issues offen/done}
+
+   ## ⚠️ Offene Probleme
+   {Kritische oder überfällige Issues}
+
+6. Sende Telegram-Highlight (max. 5 Punkte, knapp und klar)."""
+
+_WOCHENBERICHT_MONTAG_PROMPT = """Du bist der Planungs-Agent. Heute ist Montag — erstelle das Wochen-Briefing.
+
+Schritte:
+1. Suche alle offenen Issues (open, in_progress, in_review, hold).
+2. Identifiziere überfällige Issues (due_date in der Vergangenheit).
+3. Finde Issues ohne Zuweisung (kein Assignee).
+4. Prüfe, welche Meilensteine diese Woche fällig sind.
+5. Erstelle die Knowledge-Seite "Wochen-Briefing KW {KW}" mit:
+
+   ## 🔥 Kritisch / Sofort
+   {Issues mit Priorität critical oder high}
+
+   ## ⏰ Überfällig
+   {Issues mit abgelaufenem Fälligkeitsdatum}
+
+   ## 👤 Nicht zugewiesen
+   {Issues ohne Assignee}
+
+   ## 🎯 Diese Woche fällig
+   {Meilensteine und Issues bis Freitag}
+
+   ## 📋 Alle offenen Issues (nach Priorität)
+   {Vollständige Liste}
+
+6. Sende Telegram-Briefing mit den wichtigsten Punkten."""
+
+_ISSUES_BETREUER_PROMPT = """Du bist der Issues-Betreuer. Täglich prüfst du alle Issues und hältst sie aktuell.
+
+Schritte:
+1. Suche alle offenen Issues des Projekts.
+2. Analysiere und kategorisiere:
+   - Überfällig: due_date überschritten, Status nicht done/cancelled
+   - Ohne Zuweisung: kein Assignee gesetzt
+   - Bugs ohne Meilenstein: type=bug, keine milestone_id
+   - Sehr alte offene Issues (lange keine Änderung sichtbar)
+3. Aktionen die du ausführen darfst:
+   - Priorität erhöhen: Überfällige Bugs → auf 'high' oder 'critical' setzen (update_issue)
+   - Meilenstein anlegen: Wenn mehrere zusammengehörige Issues ohne Meilenstein existieren (create_milestone)
+   - Nachfragen per Telegram: Bei unklaren Issues (fehlende Beschreibung, kein Typ, keine Priorität)
+     Beispiel: "Issues-Betreuer: Issue #42 'X' hat keine Priorität — Bug oder Task?"
+4. Sende Telegram-Zusammenfassung:
+   - Geprüfte Issues gesamt
+   - Durchgeführte Änderungen (Prioritäten, Meilensteine)
+   - Offene Rückfragen
+
+Konservativ vorgehen: Nur klare Fälle ändern, bei Unsicherheit lieber nachfragen."""
+
+
+def _next_weekday(weekday: int, hour: int) -> datetime:
+    """Nächste UTC-Zeit für gegebenen Wochentag (0=Mo, 6=So) um hour:00."""
+    now = datetime.utcnow()
+    days = (weekday - now.weekday()) % 7 or 7  # mindestens 1 Tag in der Zukunft
+    return (now + timedelta(days=days)).replace(hour=hour, minute=0, second=0, microsecond=0)
 
 
 @bp.get('/api/projects/<int:project_id>/ki-agents')
@@ -226,3 +324,78 @@ def deny_pending(agent_id):
     agent.pending_confirmation = None
     db.session.commit()
     return jsonify({'ok': True, 'denied': denied_action})
+
+
+@bp.post('/api/projects/<int:project_id>/ki-agents/setup-standard')
+@login_required
+def setup_standard_agents(project_id):
+    """Legt die vier Standard-Agenten für ein Projekt an (überspringt vorhandene)."""
+    existing_names = {a.name for a in KiAgent.query.filter_by(project_id=project_id).all()}
+
+    tomorrow_9 = (datetime.utcnow() + timedelta(days=1)).replace(
+        hour=9, minute=0, second=0, microsecond=0
+    )
+
+    configs = [
+        {
+            'name': 'Bibliotekar',
+            'schedule_days': json.dumps([6]),   # Sonntag
+            'next_run_at': _next_weekday(6, 10),
+            'prompt': _BIBLIOTEKAR_PROMPT,
+            'retry_on_error': False,
+        },
+        {
+            'name': 'Wochenbericht (Freitag)',
+            'schedule_days': json.dumps([4]),   # Freitag
+            'next_run_at': _next_weekday(4, 17),
+            'prompt': _WOCHENBERICHT_FREITAG_PROMPT,
+            'retry_on_error': False,
+        },
+        {
+            'name': 'Wochenbericht (Montag)',
+            'schedule_days': json.dumps([0]),   # Montag
+            'next_run_at': _next_weekday(0, 8),
+            'prompt': _WOCHENBERICHT_MONTAG_PROMPT,
+            'retry_on_error': False,
+        },
+        {
+            'name': 'Issues-Betreuer',
+            'schedule_days': None,              # täglich
+            'next_run_at': tomorrow_9,
+            'prompt': _ISSUES_BETREUER_PROMPT,
+            'retry_on_error': True,
+        },
+    ]
+
+    created = []
+    for cfg in configs:
+        if cfg['name'] in existing_names:
+            continue
+        agent = KiAgent(
+            project_id=project_id,
+            name=cfg['name'],
+            schedule_type='interval',
+            interval_min=1440,
+            schedule_days=cfg['schedule_days'],
+            next_run_at=cfg['next_run_at'],
+            role='maker',
+            notify_telegram=True,
+            is_active=True,
+            retry_on_error=cfg['retry_on_error'],
+            retry_max=3,
+            retry_delay_min=5,
+        )
+        db.session.add(agent)
+        db.session.flush()  # ID generieren
+
+        # agenten.md in Workspace schreiben
+        workspace_dir = _agent_workspace_dir(agent)
+        os.makedirs(workspace_dir, exist_ok=True)
+        prompt_path = os.path.join(workspace_dir, 'agenten.md')
+        with open(prompt_path, 'w', encoding='utf-8') as f:
+            f.write(cfg['prompt'])
+
+        created.append(agent.to_dict())
+
+    db.session.commit()
+    return jsonify({'created': created, 'skipped': len(configs) - len(created)}), 201

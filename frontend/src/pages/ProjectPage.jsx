@@ -10,6 +10,7 @@ import IssueForm from '../components/issues/IssueForm'
 import Modal from '../components/common/Modal'
 import ActivityFeed from '../components/project/ActivityFeed'
 import MilestoneList from '../components/project/MilestoneList'
+import WorklogDashboard from '../components/project/WorklogDashboard'
 import { useToastStore } from '../store/toastStore'
 
 export default function ProjectPage() {
@@ -110,6 +111,7 @@ export default function ProjectPage() {
           {view === 'kanban' && <KanbanBoard projectId={id} />}
           {view === 'activity' && <ActivityFeed projectId={id} />}
           {view === 'milestones' && <MilestoneList projectId={id} />}
+          {view === 'worklogs' && <WorklogDashboard projectId={id} />}
         </div>
       </div>
 

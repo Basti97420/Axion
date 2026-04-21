@@ -79,6 +79,12 @@ export default function Sidebar() {
                   🏁 Meilensteine
                 </NavLink>
                 <NavLink
+                  to={`/projects/${project.id}?view=worklogs`}
+                  className={`${navItem} pl-7 text-xs ${isViewActive(project.id, 'worklogs') ? activeNavItem : 'text-gray-400'}`}
+                >
+                  ⏱ Zeiterfassung
+                </NavLink>
+                <NavLink
                   to={`/projects/${project.id}/calendar`}
                   className={({ isActive }) => `${navItem} pl-7 text-xs ${isActive ? activeNavItem : 'text-gray-400'}`}
                 >
