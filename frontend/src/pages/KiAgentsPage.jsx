@@ -646,10 +646,15 @@ export default function KiAgentsPage() {
 
   async function handleDelete() {
     if (!await showConfirm(`Agent "${selected.name}" wirklich löschen?`)) return
-    await kiAgentsApi.remove(selected.id)
-    setAgents((a) => a.filter((ag) => ag.id !== selected.id))
-    setSelected(null)
-    setCreating(false)
+    setError(null)
+    try {
+      await kiAgentsApi.remove(selected.id)
+      setAgents((a) => a.filter((ag) => ag.id !== selected.id))
+      setSelected(null)
+      setCreating(false)
+    } catch (e) {
+      setError(e.response?.data?.error || 'Fehler beim Löschen des Agenten')
+    }
   }
 
   async function handleRun() {

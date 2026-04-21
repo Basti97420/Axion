@@ -340,6 +340,7 @@ def _get_agent_ai_reply(messages, agent, return_usage=False):
     return_usage=True → gibt (text, tokens_in, tokens_out) zurück.
     """
     from app.routes.ai import _get_ai_reply
+    from app.routes.settings import load_ai_config
 
     override = {}
     if agent.api_provider != 'global':
@@ -352,7 +353,20 @@ def _get_agent_ai_reply(messages, agent, return_usage=False):
     if agent.api_key:
         override['claude_api_key'] = agent.api_key
 
-    return _get_ai_reply(messages, config_override=override or None, return_usage=return_usage)
+    try:
+        return _get_ai_reply(messages, config_override=override or None, return_usage=return_usage)
+    except Exception as e:
+        err_str = str(e)
+        # Verbindungsfehler: hilfreiche Fehlermeldung mit der verwendeten URL
+        if any(kw in err_str for kw in ('Connection', 'refused', 'ECONNREFUSED', 'ConnectionError', 'Failed to establish')):
+            cfg = {**load_ai_config(), **override}
+            url = cfg.get('ollama_url', 'unbekannt')
+            raise Exception(
+                f'Verbindung zur KI fehlgeschlagen (URL: {url}). '
+                f'Tipp: Unter Docker http://host.docker.internal:11434 statt localhost verwenden. '
+                f'URL ändern unter Einstellungen → KI-Konfiguration oder direkt im Agenten.'
+            ) from e
+        raise
 
 
 AGENT_SYSTEM_PROMPT = """Du bist ein autonomer KI-Agent im Projektmanagement-System Axion.

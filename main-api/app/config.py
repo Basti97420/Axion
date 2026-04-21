@@ -10,6 +10,8 @@ BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 class Config:
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-in-production")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    # SQLite: 30 Sekunden warten bei Write-Lock-Konkurrenz (z.B. durch KI-Agent-Threads)
+    SQLALCHEMY_ENGINE_OPTIONS = {'connect_args': {'timeout': 30}}
     SESSION_COOKIE_SAMESITE = "Lax"
     SESSION_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_DURATION = timedelta(days=30)
