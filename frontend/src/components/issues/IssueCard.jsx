@@ -10,6 +10,7 @@ import { milestonesApi } from '../../api/milestonesApi'
 import { useAuthStore } from '../../store/authStore'
 import { useIssueStore } from '../../store/issueStore'
 import { useToastStore } from '../../store/toastStore'
+import { useProjectStore } from '../../store/projectStore'
 
 const PRIORITY_ORDER = ['low', 'medium', 'high', 'critical']
 const PRIORITY_ICONS_MAP = { low: '🟢', medium: '🟡', high: '🟠', critical: '🔴' }
@@ -19,6 +20,7 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
   const user = useAuthStore((s) => s.user)
   const { upsertIssue, removeIssue } = useIssueStore()
   const { showConfirm } = useToastStore()
+  const projectStatuses = useProjectStore((s) => s.currentProjectStatuses)
   const [menu, setMenu] = useState(null)
   const [milestones, setMilestones] = useState([])
 
@@ -49,12 +51,15 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
       } catch { ms = [] }
     }
 
-    const statusSub = Object.entries(STATUS_LABELS).map(([val, label]) => ({
-      label,
-      active: issue.status === val,
+    const statusList = projectStatuses.length > 0
+      ? projectStatuses
+      : Object.entries(STATUS_LABELS).map(([key, label]) => ({ key, label }))
+    const statusSub = statusList.map((s) => ({
+      label: s.label,
+      active: issue.status === s.key,
       onClick: async () => {
         try {
-          const { data } = await issuesApi.patchStatus(issue.id, val)
+          const { data } = await issuesApi.patchStatus(issue.id, s.key)
           upsertIssue(data)
         } catch {}
       },
@@ -162,7 +167,14 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
           <div className="min-w-0 flex-1">
             <p className="text-sm text-gray-900 font-medium leading-snug line-clamp-2">{issue.title}</p>
             <div className="flex flex-wrap gap-1 mt-1.5 items-center">
-              <Badge className={STATUS_COLORS[issue.status]}>{STATUS_LABELS[issue.status]}</Badge>
+              {(() => {
+                const ps = projectStatuses.find((s) => s.key === issue.status)
+                return (
+                  <Badge className={ps ? ps.color : (STATUS_COLORS[issue.status] || 'bg-gray-100 text-gray-700')}>
+                    {ps ? ps.label : (STATUS_LABELS[issue.status] || issue.status)}
+                  </Badge>
+                )
+              })()}
               <Badge className={PRIORITY_COLORS[issue.priority]}>
                 {PRIORITY_ICONS[issue.priority]} {PRIORITY_LABELS[issue.priority]}
               </Badge>

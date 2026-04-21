@@ -24,7 +24,7 @@ def create_app():
     cors_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173").split(",")
     CORS(app, supports_credentials=True, origins=cors_origins)
 
-    from .models import user, project, issue, tag, worklog, comment, activity, calendar_entry, milestone, attachment, user_settings, wiki_page, wiki_attachment, ki_agent, python_script, telegram_message  # noqa: F401
+    from .models import user, project, issue, tag, worklog, comment, activity, calendar_entry, milestone, attachment, user_settings, wiki_page, wiki_attachment, ki_agent, python_script, telegram_message, project_status  # noqa: F401
 
     from .routes.auth import bp as auth_bp
     from .routes.projects import bp as projects_bp

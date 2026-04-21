@@ -7,6 +7,7 @@ import Button from '../common/Button'
 export default function LoginForm() {
   const [name, setName] = useState('')
   const [password, setPassword] = useState('')
+  const [remember, setRemember] = useState(true)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [firstRun, setFirstRun] = useState(false)
@@ -24,7 +25,7 @@ export default function LoginForm() {
     setError('')
     setLoading(true)
     try {
-      const { data } = await authApi.login(name, password)
+      const { data } = await authApi.login(name, password, remember)
       setUser(data.user)
       navigate('/')
     } catch (err) {
@@ -67,6 +68,15 @@ export default function LoginForm() {
           required
         />
       </div>
+      <label className="flex items-center gap-2 cursor-pointer select-none">
+        <input
+          type="checkbox"
+          checked={remember}
+          onChange={(e) => setRemember(e.target.checked)}
+          className="w-4 h-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 cursor-pointer"
+        />
+        <span className="text-sm text-gray-600">Angemeldet bleiben (30 Tage)</span>
+      </label>
       {error && <p className="text-sm text-red-600">{error}</p>}
       <Button type="submit" className="w-full" loading={loading}>
         Einloggen

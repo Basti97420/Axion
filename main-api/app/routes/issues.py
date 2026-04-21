@@ -5,12 +5,12 @@ from app import db
 from app.models.issue import Issue, issue_dependencies
 from app.models.comment import Comment
 from app.models.activity import ActivityLog
+from app.models.project_status import ProjectStatus
 from app.services import activity_logger
 from app.services import telegram_bot as tg
 
 bp = Blueprint("issues", __name__, url_prefix="/api/issues")
 
-VALID_STATUSES = ["open", "in_progress", "hold", "in_review", "done", "cancelled"]
 VALID_PRIORITIES = ["low", "medium", "high", "critical"]
 VALID_TYPES = ["task", "bug", "story", "epic", "subtask"]
 
@@ -118,13 +118,22 @@ def patch_status(issue_id):
     data = request.get_json()
     new_status = data.get("status")
 
-    if new_status not in VALID_STATUSES:
-        return jsonify({"error": f"Ungültiger Status. Erlaubt: {VALID_STATUSES}"}), 400
+    # Gültige Status aus der DB laden (projekt-spezifisch)
+    project_statuses = {s.key: s for s in ProjectStatus.query.filter_by(project_id=issue.project_id).all()}
+    if not project_statuses:
+        # Fallback falls noch keine Status angelegt wurden
+        fallback = ["open", "in_progress", "hold", "in_review", "done", "cancelled"]
+        if new_status not in fallback:
+            return jsonify({"error": f"Ungültiger Status. Erlaubt: {fallback}"}), 400
+    elif new_status not in project_statuses:
+        return jsonify({"error": f"Ungültiger Status. Erlaubt: {list(project_statuses.keys())}"}), 400
 
-    # Story kann erst auf "done" gesetzt werden wenn alle Unteraufgaben abgeschlossen sind
-    if issue.type == "story" and new_status == "done":
+    # Story kann erst abgeschlossen werden wenn alle Unteraufgaben fertig sind
+    new_status_obj = project_statuses.get(new_status)
+    if issue.type == "story" and new_status_obj and new_status_obj.is_closed:
         subtasks = Issue.query.filter_by(parent_id=issue.id).all()
-        incomplete = [s for s in subtasks if s.status not in ("done", "cancelled")]
+        open_subtask_statuses = {k for k, s in project_statuses.items() if not s.is_closed}
+        incomplete = [s for s in subtasks if s.status in open_subtask_statuses or s.status not in project_statuses]
         if incomplete:
             return jsonify({
                 "error": f"Story kann erst abgeschlossen werden, wenn alle Unteraufgaben erledigt sind ({len(incomplete)} noch offen)."
@@ -132,20 +141,21 @@ def patch_status(issue_id):
 
     old_status = issue.status
     issue.status = new_status
-    if new_status in ('done', 'cancelled'):
+    old_status_obj = project_statuses.get(old_status)
+
+    if new_status_obj and new_status_obj.is_closed:
         issue.closed_at = datetime.utcnow()
-    elif old_status in ('done', 'cancelled'):
+    elif old_status_obj and old_status_obj.is_closed:
         issue.closed_at = None
+
     activity_logger.log("status_changed", user_id=current_user.id,
                         issue_id=issue.id, project_id=issue.project_id,
                         field_changed="status", old_value=old_status, new_value=new_status)
     db.session.commit()
     cfg = tg.load_tg_config()
     if cfg.get('notify_on_status_change') and cfg.get('bot_token') and cfg.get('chat_id'):
-        _labels = {'open': 'Offen', 'in_progress': 'In Arbeit', 'hold': 'Pausiert',
-                   'in_review': 'Im Review', 'done': 'Erledigt', 'cancelled': 'Abgebrochen'}
-        old_label = _labels.get(old_status, old_status)
-        new_label = _labels.get(new_status, new_status)
+        old_label = old_status_obj.label if old_status_obj else old_status
+        new_label = new_status_obj.label if new_status_obj else new_status
         tg.notify(f'🔄 Issue <b>#{issue.id}</b> „{issue.title}": {old_label} → {new_label}')
     return jsonify(issue.to_dict()), 200
 

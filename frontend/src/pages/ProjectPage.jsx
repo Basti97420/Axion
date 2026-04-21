@@ -20,6 +20,7 @@ export default function ProjectPage() {
 
   const setCurrentProject = useProjectStore((s) => s.setCurrentProject)
   const currentProject = useProjectStore((s) => s.currentProject)
+  const setCurrentProjectStatuses = useProjectStore((s) => s.setCurrentProjectStatuses)
   const { setIssues, upsertIssue } = useIssueStore()
   const currentIssue = useIssueStore((s) => s.currentIssue)
 
@@ -36,6 +37,7 @@ export default function ProjectPage() {
 
   useEffect(() => {
     projectsApi.getOne(id).then(({ data }) => setCurrentProject(data)).catch(() => {})
+    projectsApi.getStatuses(id).then(({ data }) => setCurrentProjectStatuses(data)).catch(() => {})
     loadIssues()
   }, [id])
 

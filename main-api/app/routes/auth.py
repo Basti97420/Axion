@@ -19,7 +19,8 @@ def login():
 
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
-    login_user(user)
+    remember = bool(data.get("remember", False))
+    login_user(user, remember=remember)
     return jsonify({"user": user.to_dict()}), 200
 
 

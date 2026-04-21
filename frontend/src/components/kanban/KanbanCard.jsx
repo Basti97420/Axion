@@ -11,6 +11,7 @@ import { milestonesApi } from '../../api/milestonesApi'
 import { useAuthStore } from '../../store/authStore'
 import { useIssueStore } from '../../store/issueStore'
 import { useToastStore } from '../../store/toastStore'
+import { useProjectStore } from '../../store/projectStore'
 
 const PRIORITY_ORDER = ['low', 'medium', 'high', 'critical']
 const PRIORITY_LABELS_DE = { low: 'Niedrig', medium: 'Mittel', high: 'Hoch', critical: 'Kritisch' }
@@ -21,6 +22,7 @@ export default function KanbanCard({ issue, projectId }) {
   const user = useAuthStore((s) => s.user)
   const { upsertIssue, removeIssue } = useIssueStore()
   const { showConfirm } = useToastStore()
+  const projectStatuses = useProjectStore((s) => s.currentProjectStatuses)
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: issue.id,
     data: { issue },
@@ -42,12 +44,15 @@ export default function KanbanCard({ issue, projectId }) {
       } catch { ms = [] }
     }
 
-    const statusSub = Object.entries(STATUS_LABELS).map(([val, label]) => ({
-      label,
-      active: issue.status === val,
+    const statusList = projectStatuses.length > 0
+      ? projectStatuses
+      : Object.entries(STATUS_LABELS).map(([key, label]) => ({ key, label }))
+    const statusSub = statusList.map((s) => ({
+      label: s.label,
+      active: issue.status === s.key,
       onClick: async () => {
         try {
-          const { data } = await issuesApi.patchStatus(issue.id, val)
+          const { data } = await issuesApi.patchStatus(issue.id, s.key)
           upsertIssue(data)
         } catch {}
       },

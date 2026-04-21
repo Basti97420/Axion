@@ -1,9 +1,8 @@
 import { useDroppable } from '@dnd-kit/core'
 import KanbanCard from './KanbanCard'
-import { STATUS_LABELS, STATUS_DOT } from '../../utils/statusColors'
 
-export default function KanbanColumn({ status, issues, projectId }) {
-  const { setNodeRef, isOver } = useDroppable({ id: status })
+export default function KanbanColumn({ statusObj, issues, projectId }) {
+  const { setNodeRef, isOver } = useDroppable({ id: statusObj.key })
 
   return (
     <div
@@ -14,9 +13,9 @@ export default function KanbanColumn({ status, issues, projectId }) {
     >
       {/* Spalten-Header */}
       <div className="px-3 py-2.5 flex items-center gap-2">
-        <span className={`w-2 h-2 rounded-full ${STATUS_DOT[status]}`} />
+        <span className={`w-2 h-2 rounded-full ${statusObj.dot_color}`} />
         <span className="text-xs font-semibold text-gray-700 uppercase tracking-wide">
-          {STATUS_LABELS[status]}
+          {statusObj.label}
         </span>
         <span className="ml-auto text-xs text-gray-400 bg-white rounded-full px-1.5 py-0.5">
           {issues.length}
