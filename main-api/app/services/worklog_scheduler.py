@@ -42,6 +42,7 @@ def _check_loop(app):
                         duration_min=duration_min,
                         description=f'Automatisch erfasst aus Kalendereintrag #{entry.id}: {title}',
                         calendar_entry_id=entry.id,
+                        needs_confirmation=True,
                     )
                     db.session.add(wl)
 

@@ -3,11 +3,20 @@ import { createPortal } from 'react-dom'
 
 function SubMenuItem({ item }) {
   const [open, setOpen] = useState(false)
+  const closeTimer = useRef(null)
+
+  function scheduleClose() {
+    closeTimer.current = setTimeout(() => setOpen(false), 150)
+  }
+  function cancelClose() {
+    clearTimeout(closeTimer.current)
+  }
+
   return (
     <div
       className="relative"
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
+      onMouseEnter={() => { cancelClose(); setOpen(true) }}
+      onMouseLeave={scheduleClose}
     >
       <button className="w-full text-left px-4 py-1.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2">
         {item.icon && <span className="w-4 text-center">{item.icon}</span>}
@@ -15,7 +24,11 @@ function SubMenuItem({ item }) {
         <span className="text-gray-400 text-xs">▶</span>
       </button>
       {open && (
-        <div className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded-xl shadow-xl py-1 w-44 z-[9999]">
+        <div
+          className="absolute left-full top-0 ml-1 bg-white border border-gray-200 rounded-xl shadow-xl py-1 w-44 z-[9999]"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
+        >
           {item.submenu.map((sub, i) =>
             sub.divider ? (
               <div key={i} className="border-t border-gray-100 my-1" />

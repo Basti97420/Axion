@@ -15,6 +15,42 @@
   }
 }
 
+/* Kanban horizontaler Scrollbar — immer sichtbar */
+.kanban-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f4f6;
+}
+.kanban-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+.kanban-scroll::-webkit-scrollbar-track {
+  background: #f3f4f6;
+  border-radius: 4px;
+}
+.kanban-scroll::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 4px;
+}
+.kanban-scroll::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+/* Kanban-Spalten vertikaler Scrollbar */
+.kanban-col-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #e5e7eb transparent;
+}
+.kanban-col-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.kanban-col-scroll::-webkit-scrollbar-thumb {
+  background: #e5e7eb;
+  border-radius: 4px;
+}
+.kanban-col-scroll::-webkit-scrollbar-thumb:hover {
+  background: #d1d5db;
+}
+
 /* Wiki link styles */
 .wiki-link {
   @apply text-primary-600 underline hover:text-primary-700;

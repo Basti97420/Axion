@@ -452,6 +452,8 @@ def _execute_action(action, user_id, context=None):
         from datetime import date as dt_date
         raw = action_data.get('due_date')
         issue.due_date = dt_date.fromisoformat(raw) if raw else None
+        db.session.add(ActivityLog(issue_id=issue.id, user_id=user_id, action='ki_update',
+                                   field_changed='due_date', new_value=str(raw)))
         db.session.commit()
         return {'type': 'issue_updated', 'issue_id': issue.id, 'changes': {'due_date': raw}}
 
@@ -459,14 +461,17 @@ def _execute_action(action, user_id, context=None):
         from app.models.worklog import Worklog
         from datetime import date as dt_date
         hours = float(action_data.get('hours', 1))
+        duration_min = int(hours * 60)
         wl = Worklog(
             issue_id=issue_id,
             user_id=user_id,
-            duration_min=int(hours * 60),
+            duration_min=duration_min,
             date=dt_date.today(),
             description=action_data.get('description', ''),
         )
         db.session.add(wl)
+        db.session.add(ActivityLog(issue_id=issue.id, user_id=user_id, action='ki_worklog',
+                                   new_value=f'{duration_min}min'))
         db.session.commit()
         return {'type': 'worklog_added', 'issue_id': issue_id, 'hours': hours}
 
@@ -475,6 +480,8 @@ def _execute_action(action, user_id, context=None):
         tag = Tag.query.get(action_data.get('tag_id'))
         if tag and tag not in issue.tags:
             issue.tags.append(tag)
+            db.session.add(ActivityLog(issue_id=issue.id, user_id=user_id, action='ki_update',
+                                       field_changed='tag', new_value=tag.name))
             db.session.commit()
         return {'type': 'tag_added', 'issue_id': issue_id}
 
@@ -483,6 +490,8 @@ def _execute_action(action, user_id, context=None):
         tag = Tag.query.get(action_data.get('tag_id'))
         if tag and tag in issue.tags:
             issue.tags.remove(tag)
+            db.session.add(ActivityLog(issue_id=issue.id, user_id=user_id, action='ki_update',
+                                       field_changed='tag_removed', new_value=tag.name))
             db.session.commit()
         return {'type': 'tag_removed', 'issue_id': issue_id}
 
@@ -506,6 +515,8 @@ def _execute_action(action, user_id, context=None):
 
     if action_type == 'assign_milestone':
         issue.milestone_id = action_data.get('milestone_id')
+        db.session.add(ActivityLog(issue_id=issue.id, user_id=user_id, action='ki_update',
+                                   field_changed='milestone_id', new_value=str(issue.milestone_id)))
         db.session.commit()
         return {'type': 'issue_updated', 'issue_id': issue.id,
                 'changes': {'milestone_id': issue.milestone_id}}

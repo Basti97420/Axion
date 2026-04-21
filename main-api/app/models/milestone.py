@@ -9,6 +9,7 @@ class Milestone(db.Model):
     project_id = db.Column(db.Integer, db.ForeignKey('projects.id', ondelete='CASCADE'), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     description = db.Column(db.Text, nullable=True)
+    start_date = db.Column(db.Date, nullable=True)
     due_date = db.Column(db.Date, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -21,6 +22,7 @@ class Milestone(db.Model):
             'project_id': self.project_id,
             'name': self.name,
             'description': self.description,
+            'start_date': self.start_date.isoformat() if self.start_date else None,
             'due_date': self.due_date.isoformat() if self.due_date else None,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }

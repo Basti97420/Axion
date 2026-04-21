@@ -23,7 +23,7 @@ export default function KanbanColumn({ statusObj, issues, projectId }) {
       </div>
 
       {/* Karten */}
-      <div className="px-2 pb-2 space-y-2 min-h-[60px]">
+      <div className="px-2 pb-2 space-y-2 min-h-[60px] overflow-y-auto max-h-[calc(100vh-12rem)] kanban-col-scroll">
         {issues.map((issue) => (
           <KanbanCard key={issue.id} issue={issue} projectId={projectId} />
         ))}

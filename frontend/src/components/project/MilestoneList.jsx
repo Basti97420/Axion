@@ -10,11 +10,12 @@ import { useToastStore } from '../../store/toastStore'
 function MilestoneForm({ onSubmit, onCancel, loading, initial = {} }) {
   const [name, setName] = useState(initial.name || '')
   const [description, setDescription] = useState(initial.description || '')
+  const [startDate, setStartDate] = useState(initial.start_date || '')
   const [dueDate, setDueDate] = useState(initial.due_date || '')
 
   function handleSubmit(e) {
     e.preventDefault()
-    onSubmit({ name, description, due_date: dueDate || null })
+    onSubmit({ name, description, start_date: startDate || null, due_date: dueDate || null })
   }
 
   const fc = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500'
@@ -26,9 +27,15 @@ function MilestoneForm({ onSubmit, onCancel, loading, initial = {} }) {
         <label className={lc}>Name *</label>
         <input value={name} onChange={(e) => setName(e.target.value)} className={fc} required placeholder="Meilenstein-Bezeichnung" />
       </div>
-      <div>
-        <label className={lc}>Fällig am</label>
-        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fc} />
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className={lc}>Startdatum</label>
+          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className={fc} />
+        </div>
+        <div>
+          <label className={lc}>Fällig am</label>
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={fc} />
+        </div>
       </div>
       <div>
         <label className={lc}>Beschreibung</label>
@@ -134,12 +141,16 @@ export default function MilestoneList({ projectId }) {
         <p className="text-sm text-gray-400">Noch keine Meilensteine.</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {milestones.map((m) => (
+          {milestones.map((m) => {
+            const isOverdue = m.due_date && new Date(m.due_date) < new Date() && m.progress < 100
+            return (
             <div
               key={m.id}
               className={`border rounded-xl p-4 bg-white transition-colors ${
                 dragOverId === m.id
                   ? 'border-primary-400 bg-primary-50 ring-2 ring-primary-200'
+                  : isOverdue
+                  ? 'border-red-300 bg-red-50'
                   : 'border-gray-200'
               }`}
               onDragOver={(e) => handleDragOver(e, m.id)}
@@ -148,10 +159,22 @@ export default function MilestoneList({ projectId }) {
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
-                  <p className="text-sm font-semibold text-gray-800 truncate">{m.name}</p>
-                  {m.due_date && (
-                    <p className="text-xs text-gray-400 mt-0.5">Fällig: {formatDate(m.due_date)}</p>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-gray-800 truncate">{m.name}</p>
+                    {isOverdue && (
+                      <span className="text-xs font-medium text-red-600 bg-red-100 px-1.5 py-0.5 rounded-full shrink-0">Überfällig</span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    {m.start_date && (
+                      <p className="text-xs text-gray-400">Start: {formatDate(m.start_date)}</p>
+                    )}
+                    {m.due_date && (
+                      <p className={`text-xs ${isOverdue ? 'text-red-600 font-semibold' : 'text-gray-400'}`}>
+                        Fällig: {formatDate(m.due_date)}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
                   <button onClick={() => setEditTarget(m)} className="text-xs text-gray-400 hover:text-primary-600">✏</button>
@@ -171,7 +194,7 @@ export default function MilestoneList({ projectId }) {
                 <ProgressBar value={m.progress} />
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 

@@ -5,6 +5,7 @@ from sqlalchemy import func
 from app import db
 from app.models.worklog import Worklog
 from app.models.issue import Issue
+from app.models.project import Project
 
 bp = Blueprint("worklogs", __name__, url_prefix="/api")
 
@@ -78,6 +79,37 @@ def get_project_worklogs(project_id):
     )
 
     return jsonify([{**w.to_dict(), "issue_title": title} for w, title in rows]), 200
+
+
+@bp.route("/worklogs/pending", methods=["GET"])
+@login_required
+def get_pending_worklogs():
+    """Alle Auto-Buchungen die noch bestätigt werden müssen."""
+    rows = (
+        db.session.query(Worklog, Issue.title, Project.name)
+        .join(Issue, Worklog.issue_id == Issue.id)
+        .join(Project, Issue.project_id == Project.id)
+        .filter(Worklog.needs_confirmation == True)
+        .order_by(Worklog.created_at.desc())
+        .all()
+    )
+    result = []
+    for wl, issue_title, project_name in rows:
+        d = wl.to_dict()
+        d['issue_title'] = issue_title
+        d['project_name'] = project_name
+        result.append(d)
+    return jsonify(result), 200
+
+
+@bp.route("/worklogs/<int:worklog_id>/confirm", methods=["POST"])
+@login_required
+def confirm_worklog(worklog_id):
+    """Bestätigt eine automatisch erstellte Zeitbuchung."""
+    worklog = db.get_or_404(Worklog, worklog_id)
+    worklog.needs_confirmation = False
+    db.session.commit()
+    return jsonify(worklog.to_dict()), 200
 
 
 @bp.route("/worklog/summary", methods=["GET"])

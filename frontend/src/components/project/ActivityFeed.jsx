@@ -12,10 +12,12 @@ const REVERTABLE = new Set(['updated', 'status_changed', 'field_changed', 'ki_up
 function actionLabel(log) {
   if (log.action === 'status_changed')
     return `hat Status geändert: ${log.old_value} → ${log.new_value}`
-  if (log.action === 'commented')
+  if (log.action === 'commented' || log.action === 'ki_comment')
     return 'hat kommentiert'
-  if (log.action === 'created')
+  if (log.action === 'created' || log.action === 'ki_create')
     return log.issue_id ? 'hat Issue erstellt' : 'hat Projekt erstellt'
+  if (log.action === 'ki_worklog')
+    return `hat Zeit gebucht: ${log.new_value}`
   if (log.action === 'reverted')
     return `hat ${log.field_changed} zurückgesetzt auf „${log.new_value}"`
   if (log.field_changed)
@@ -84,13 +86,22 @@ export default function ActivityFeed({ projectId }) {
                 && log.field_changed
                 && log.old_value !== null && log.old_value !== undefined
                 && ['updated', 'status_changed', 'field_changed', 'ki_update', 'reverted'].includes(log.action)
+              const isKi = log.action?.startsWith('ki_') && !log.user_name
               return (
                 <li key={log.id} className="flex gap-3 items-start text-sm">
-                  <span className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
-                    {(log.user_name || '?')[0].toUpperCase()}
-                  </span>
+                  {isKi ? (
+                    <span className="w-7 h-7 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                      🤖
+                    </span>
+                  ) : (
+                    <span className="w-7 h-7 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+                      {(log.user_name || '?')[0].toUpperCase()}
+                    </span>
+                  )}
                   <div className="min-w-0 flex-1">
-                    <span className="font-medium text-gray-800">{log.user_name || 'System'}</span>{' '}
+                    <span className={`font-medium ${isKi ? 'text-purple-700' : 'text-gray-800'}`}>
+                      {isKi ? 'KI-Assistent' : (log.user_name || 'System')}
+                    </span>{' '}
                     <span className="text-gray-600">{actionLabel(log)}</span>
                     {log.issue_id && (
                       <Link

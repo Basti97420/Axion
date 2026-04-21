@@ -29,6 +29,8 @@ def create_milestone(project_id):
         name=data['name'].strip(),
         description=data.get('description', ''),
     )
+    if data.get('start_date'):
+        m.start_date = date.fromisoformat(data['start_date'])
     if data.get('due_date'):
         m.due_date = date.fromisoformat(data['due_date'])
 
@@ -56,6 +58,8 @@ def update_milestone(milestone_id):
         m.name = data['name'].strip()
     if 'description' in data:
         m.description = data['description']
+    if 'start_date' in data:
+        m.start_date = date.fromisoformat(data['start_date']) if data['start_date'] else None
     if 'due_date' in data:
         m.due_date = date.fromisoformat(data['due_date']) if data['due_date'] else None
 

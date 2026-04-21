@@ -13,6 +13,7 @@ class Worklog(db.Model):
     date = db.Column(db.Date, nullable=False)
     duration_min = db.Column(db.Integer, nullable=False)  # Dauer in Minuten
     description = db.Column(db.Text, nullable=True)
+    needs_confirmation = db.Column(db.Boolean, default=False)  # True bei Auto-Buchung aus Kalender
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
@@ -26,5 +27,6 @@ class Worklog(db.Model):
             "duration_h": round(self.duration_min / 60, 2),
             "description": self.description,
             "calendar_entry_id": self.calendar_entry_id,
+            "needs_confirmation": self.needs_confirmation,
             "created_at": self.created_at.strftime('%Y-%m-%dT%H:%M:%SZ') if self.created_at else None,
         }

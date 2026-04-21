@@ -66,7 +66,7 @@ export default function KanbanBoard({ projectId }) {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
       >
-        <div className="flex gap-3 overflow-x-auto pb-4 px-4 pt-3 items-start">
+        <div className="flex gap-3 overflow-x-auto pb-4 px-4 pt-3 items-start kanban-scroll">
           {projectStatuses.map((statusObj) => {
             const TWO_DAYS_MS = 2 * 24 * 60 * 60 * 1000
             const columnIssues = issues.filter((i) => {

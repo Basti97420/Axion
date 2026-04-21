@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { projectsApi } from '../../api/projectsApi'
 import { useProjectStore } from '../../store/projectStore'
 
@@ -25,6 +25,10 @@ export default function StatusManager({ projectId, onClose }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [deleteErrors, setDeleteErrors] = useState({})
+
+  // Drag-to-reorder state
+  const dragIndex = useRef(null)
+  const [dragOverIndex, setDragOverIndex] = useState(null)
 
   async function handleCreate(e) {
     e.preventDefault()
@@ -63,6 +67,35 @@ export default function StatusManager({ projectId, onClose }) {
     }
   }
 
+  function handleDragStart(i) {
+    dragIndex.current = i
+  }
+
+  function handleDragOver(e, i) {
+    e.preventDefault()
+    setDragOverIndex(i)
+  }
+
+  async function handleDrop(i) {
+    const from = dragIndex.current
+    if (from === null || from === i) { setDragOverIndex(null); return }
+
+    // Lokale Neuordnung
+    const newOrder = [...statuses]
+    const [moved] = newOrder.splice(from, 1)
+    newOrder.splice(i, 0, moved)
+    setStatuses(newOrder)
+    setDragOverIndex(null)
+    dragIndex.current = null
+
+    // Backend: Positionen für alle betroffenen Einträge aktualisieren
+    await Promise.all(
+      newOrder.map((s, idx) =>
+        projectsApi.updateStatus(projectId, s.id, { position: idx }).catch(() => {})
+      )
+    )
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
@@ -71,7 +104,10 @@ export default function StatusManager({ projectId, onClose }) {
       <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-          <h2 className="text-base font-semibold text-gray-900">Kanban-Spalten verwalten</h2>
+          <div>
+            <h2 className="text-base font-semibold text-gray-900">Kanban-Spalten verwalten</h2>
+            <p className="text-xs text-gray-400 mt-0.5">Reihenfolge per Drag & Drop ändern</p>
+          </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
@@ -80,10 +116,25 @@ export default function StatusManager({ projectId, onClose }) {
         </div>
 
         {/* Status-Liste */}
-        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-2">
-          {statuses.map((s) => (
+        <div className="overflow-y-auto flex-1 px-6 py-4 space-y-1.5">
+          {statuses.map((s, i) => (
             <div key={s.id}>
-              <div className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 border border-gray-100">
+              <div
+                draggable
+                onDragStart={() => handleDragStart(i)}
+                onDragOver={(e) => handleDragOver(e, i)}
+                onDrop={() => handleDrop(i)}
+                onDragEnd={() => setDragOverIndex(null)}
+                className={`flex items-center gap-3 p-2.5 rounded-lg border transition-colors ${
+                  dragOverIndex === i
+                    ? 'border-primary-400 bg-primary-50'
+                    : 'border-gray-100 bg-gray-50'
+                }`}
+              >
+                {/* Drag Handle */}
+                <span className="text-gray-300 cursor-grab active:cursor-grabbing select-none text-lg leading-none">
+                  ⠿
+                </span>
                 <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${s.dot_color}`} />
                 <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${s.color}`}>
                   {s.label}

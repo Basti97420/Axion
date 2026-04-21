@@ -5,6 +5,8 @@ import { authApi } from '../../api/authApi'
 import { searchApi } from '../../api/searchApi'
 import { wikiApi } from '../../api/wikiApi'
 import { useAiStore } from '../../store/aiStore'
+import { useNotificationStore } from '../../store/notificationStore'
+import { useNotificationCount } from './NotificationDrawer'
 import PasswordModal from './PasswordModal'
 import { STATUS_COLORS, STATUS_LABELS } from '../../utils/statusColors'
 import { APP_VERSION } from '../../utils/version'
@@ -14,6 +16,8 @@ export default function Navbar({ onToggleSidebar }) {
   const clearUser = useAuthStore((s) => s.clearUser)
   const navigate = useNavigate()
   const toggleAi = useAiStore((s) => s.toggle)
+  const toggleNotifications = useNotificationStore((s) => s.toggle)
+  const notificationCount = useNotificationCount()
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
   const [showMenu, setShowMenu] = useState(false)
@@ -167,6 +171,22 @@ export default function Navbar({ onToggleSidebar }) {
 
       {/* Rechte Seite */}
       <div className="ml-auto flex items-center gap-2">
+
+        {/* Benachrichtigungen */}
+        <button
+          onClick={toggleNotifications}
+          className="relative p-2 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700 transition-colors"
+          title="Benachrichtigungen"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+            <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
+          </svg>
+          {notificationCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center leading-none">
+              {notificationCount > 9 ? '9+' : notificationCount}
+            </span>
+          )}
+        </button>
 
         {/* KI-Button */}
         <button
