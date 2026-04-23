@@ -77,6 +77,13 @@ export default function AiChatPanel() {
       case 'tag_added':         return `✓ Tag zu Issue #${r.issue_id} hinzugefügt`
       case 'tag_removed':       return `✓ Tag von Issue #${r.issue_id} entfernt`
       case 'read_done':         return `↻ Daten abgerufen (${r.action})`
+      case 'memory_saved':      return `✓ Memory gespeichert: ${r.filename}`
+      case 'file_created':      return `✓ Datei erstellt: ${r.filename}`
+      case 'agent_triggered':   return `✓ Agent gestartet (ID: ${r.agent_id})`
+      case 'script_started':    return `✓ Script gestartet`
+      case 'script_created':    return `✓ Script erstellt: ${r.name || r.script_id}`
+      case 'ki_agent_created':  return `✓ KI-Agent erstellt: ${r.name}`
+      case 'ki_agent_started':  return `✓ KI-Agent gestartet (ID: ${r.agent_id})`
       default:                  return `✓ ${r.type}`
     }
   }
@@ -137,37 +144,44 @@ export default function AiChatPanel() {
               }`}>
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 {msg.action_results && msg.action_results.length > 0 && (
-                  <div className="mt-2 space-y-0.5 border-t border-gray-200 pt-1.5">
-                    {msg.action_results.map((result, idx) => (
-                      <details key={idx} className="group text-xs">
-                        <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5">
-                          <span className="group-open:hidden text-[10px]">▶</span>
-                          <span className="hidden group-open:inline text-[10px]">▼</span>
-                          <span>{actionResultLabel(result)}</span>
-                        </summary>
-                        <div className="mt-1 ml-4 space-y-1.5">
-                          {result._prompt && (
+                  <details className="mt-2 border-t border-gray-200 pt-1.5 group/outer">
+                    <summary className="cursor-pointer select-none list-none text-xs text-green-700 font-medium flex items-center gap-1.5 py-0.5 hover:text-green-800">
+                      <span className="group-open/outer:hidden text-[10px]">▶</span>
+                      <span className="hidden group-open/outer:inline text-[10px]">▼</span>
+                      ✅ {msg.action_results.length} Aktion{msg.action_results.length !== 1 ? 'en' : ''} ausgeführt
+                    </summary>
+                    <div className="mt-1 space-y-0.5 ml-1">
+                      {msg.action_results.map((result, idx) => (
+                        <details key={idx} className="group text-xs">
+                          <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5 pl-1">
+                            <span className="group-open:hidden text-[10px]">▶</span>
+                            <span className="hidden group-open:inline text-[10px]">▼</span>
+                            <span>{actionResultLabel(result)}</span>
+                          </summary>
+                          <div className="mt-1 ml-4 space-y-1.5">
+                            {result._prompt && (
+                              <div>
+                                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📤 Gesendeter Prompt</div>
+                                <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._prompt}</pre>
+                              </div>
+                            )}
+                            {result._raw && (
+                              <div>
+                                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📥 KI-Antwort</div>
+                                <pre className="text-[10px] bg-yellow-50 border border-yellow-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._raw}</pre>
+                              </div>
+                            )}
                             <div>
-                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📤 Gesendeter Prompt</div>
-                              <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._prompt}</pre>
+                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📋 Ergebnis</div>
+                              <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
+                                {JSON.stringify(Object.fromEntries(Object.entries(result).filter(([k]) => !k.startsWith('_'))), null, 2)}
+                              </pre>
                             </div>
-                          )}
-                          {result._raw && (
-                            <div>
-                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📥 KI-Antwort</div>
-                              <pre className="text-[10px] bg-yellow-50 border border-yellow-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._raw}</pre>
-                            </div>
-                          )}
-                          <div>
-                            <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📋 Ergebnis</div>
-                            <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
-                              {JSON.stringify(Object.fromEntries(Object.entries(result).filter(([k]) => !k.startsWith('_'))), null, 2)}
-                            </pre>
                           </div>
-                        </div>
-                      </details>
-                    ))}
-                  </div>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
                 )}
               </div>
             </div>

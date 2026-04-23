@@ -3,7 +3,7 @@ from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required
 from werkzeug.utils import secure_filename
 
-bp = Blueprint('chat_workspace', __name__, url_prefix='/api/ai/chat-workspace')
+bp = Blueprint('chat_workspace', __name__, url_prefix='/api/workspace')
 
 ALLOWED_EXTENSIONS = {'.md', '.txt', '.csv'}
 
