@@ -145,17 +145,15 @@ export default function AiChatPanel() {
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 {msg.action_results && msg.action_results.length > 0 && (
                   <details className="mt-2 border-t border-gray-200 pt-1.5 group/outer">
-                    <summary className="cursor-pointer select-none list-none text-xs text-green-700 font-medium flex items-center gap-1.5 py-0.5 hover:text-green-800">
-                      <span className="group-open/outer:hidden text-[10px]">▶</span>
-                      <span className="hidden group-open/outer:inline text-[10px]">▼</span>
+                    <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden text-xs text-green-700 font-medium flex items-center gap-1.5 py-0.5 hover:text-green-800">
+                      <svg className="w-2 h-2 shrink-0 transition-transform duration-150 group-open/outer:rotate-90" fill="currentColor" viewBox="0 0 6 10"><path d="M0 0l6 5-6 5V0z"/></svg>
                       ✅ {msg.action_results.length} Aktion{msg.action_results.length !== 1 ? 'en' : ''} ausgeführt
                     </summary>
                     <div className="mt-1 space-y-0.5 ml-1">
                       {msg.action_results.map((result, idx) => (
-                        <details key={idx} className="group text-xs">
-                          <summary className="cursor-pointer select-none list-none flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5 pl-1">
-                            <span className="group-open:hidden text-[10px]">▶</span>
-                            <span className="hidden group-open:inline text-[10px]">▼</span>
+                        <details key={idx} className="group/inner text-xs">
+                          <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5 pl-1">
+                            <svg className="w-1.5 h-1.5 shrink-0 transition-transform duration-150 group-open/inner:rotate-90" fill="currentColor" viewBox="0 0 6 10"><path d="M0 0l6 5-6 5V0z"/></svg>
                             <span>{actionResultLabel(result)}</span>
                           </summary>
                           <div className="mt-1 ml-4 space-y-1.5">
