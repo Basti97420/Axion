@@ -12,6 +12,7 @@ import WorklogEntry from '../worklog/WorklogEntry'
 import WorklogList from '../worklog/WorklogList'
 import { STATUS_COLORS, STATUS_DOT, STATUS_LABELS, STATUSES } from '../../utils/statusColors'
 import { PRIORITY_COLORS, PRIORITY_LABELS, PRIORITY_ICONS, PRIORITIES } from '../../utils/priorityUtils'
+import { EISENHOWER_LABELS, EISENHOWER_COLORS, EISENHOWER_SHORT, EISENHOWER_QUADRANT } from '../../utils/eisenhowerUtils'
 import { formatDate, formatDateTime } from '../../utils/dateUtils'
 import { issuesApi } from '../../api/issuesApi'
 import { worklogApi } from '../../api/worklogApi'
@@ -250,6 +251,15 @@ export default function IssueDetail({ issue, projectId }) {
     }
   }
 
+  async function handleEisenhowerChange(val) {
+    try {
+      const { data: updated } = await issuesApi.patchEisenhower(issue.id, val || null)
+      upsertIssue(updated)
+    } catch {
+      // silent
+    }
+  }
+
   async function handleDelete() {
     if (!await showConfirm(`Issue "${issue.title}" wirklich löschen?`)) return
     let deleteSubtasks = false
@@ -366,6 +376,19 @@ export default function IssueDetail({ issue, projectId }) {
             >
               {PRIORITIES.map((p) => (
                 <option key={p} value={p}>{PRIORITY_ICONS[p]} {PRIORITY_LABELS[p]}</option>
+              ))}
+            </select>
+            <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-50">▾</span>
+          </div>
+          <div className="relative">
+            <select
+              value={issue.eisenhower || ''}
+              onChange={(e) => handleEisenhowerChange(e.target.value)}
+              className={`appearance-none text-xs font-semibold px-2.5 py-1 rounded-full pr-6 cursor-pointer border-0 focus:outline-none focus:ring-2 focus:ring-primary-400 ${issue.eisenhower ? EISENHOWER_COLORS[issue.eisenhower] : 'bg-gray-100 text-gray-400'}`}
+            >
+              <option value="">— Eisenhower —</option>
+              {Object.entries(EISENHOWER_LABELS).map(([k, v]) => (
+                <option key={k} value={k}>{EISENHOWER_SHORT[k]} · {v}</option>
               ))}
             </select>
             <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-50">▾</span>

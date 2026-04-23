@@ -4,6 +4,7 @@ import Badge from '../common/Badge'
 import ContextMenu from '../common/ContextMenu'
 import { STATUS_COLORS, STATUS_LABELS } from '../../utils/statusColors'
 import { PRIORITY_COLORS, PRIORITY_LABELS, PRIORITY_ICONS } from '../../utils/priorityUtils'
+import { EISENHOWER_COLORS, EISENHOWER_SHORT } from '../../utils/eisenhowerUtils'
 import { formatDate, dueDateColor } from '../../utils/dateUtils'
 import { issuesApi } from '../../api/issuesApi'
 import { milestonesApi } from '../../api/milestonesApi'
@@ -178,6 +179,11 @@ export default function IssueCard({ issue, projectId, selected, draggable, nativ
               <Badge className={PRIORITY_COLORS[issue.priority]}>
                 {PRIORITY_ICONS[issue.priority]} {PRIORITY_LABELS[issue.priority]}
               </Badge>
+              {issue.eisenhower && (
+                <Badge className={EISENHOWER_COLORS[issue.eisenhower]}>
+                  {EISENHOWER_SHORT[issue.eisenhower]}
+                </Badge>
+              )}
               {issue.due_date && (
                 <span className={`text-xs ${dueDateColor(issue.due_date, issue.status)}`}>
                   {formatDate(issue.due_date)}

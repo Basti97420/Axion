@@ -33,6 +33,8 @@ class Issue(db.Model):
     start_date = db.Column(db.Date, nullable=True)
     estimated_hours = db.Column(db.Float, nullable=True)
 
+    eisenhower = db.Column(db.String(20), nullable=True)  # do_first, schedule, delegate, eliminate
+
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc),
                            onupdate=lambda: datetime.now(timezone.utc))
@@ -75,6 +77,7 @@ class Issue(db.Model):
             "updated_at": self.updated_at.strftime('%Y-%m-%dT%H:%M:%SZ') if self.updated_at else None,
             "closed_at": self.closed_at.strftime('%Y-%m-%dT%H:%M:%SZ') if self.closed_at else None,
             "is_blocked": len(self.blocked_by_issues) > 0,
+            "eisenhower": self.eisenhower,
         }
         if include_tags:
             d["tags"] = [tag.to_dict() for tag in self.tags]

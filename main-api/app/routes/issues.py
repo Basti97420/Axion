@@ -13,6 +13,7 @@ bp = Blueprint("issues", __name__, url_prefix="/api/issues")
 
 VALID_PRIORITIES = ["low", "medium", "high", "critical"]
 VALID_TYPES = ["task", "bug", "story", "epic", "subtask"]
+VALID_EISENHOWER = ["do_first", "schedule", "delegate", "eliminate"]
 
 
 @bp.route("", methods=["GET"])
@@ -58,6 +59,9 @@ def create_issue():
         issue.due_date = date.fromisoformat(data["due_date"])
     if data.get("start_date"):
         issue.start_date = date.fromisoformat(data["start_date"])
+    if "eisenhower" in data:
+        val = data.get("eisenhower")
+        issue.eisenhower = val if val in VALID_EISENHOWER else None
 
     db.session.add(issue)
     db.session.flush()
@@ -106,7 +110,20 @@ def update_issue(issue_id):
 
     if "start_date" in data:
         issue.start_date = date.fromisoformat(data["start_date"]) if data["start_date"] else None
+    if "eisenhower" in data:
+        val = data.get("eisenhower")
+        issue.eisenhower = val if val in VALID_EISENHOWER else None
 
+    db.session.commit()
+    return jsonify(issue.to_dict()), 200
+
+
+@bp.route("/<int:issue_id>/eisenhower", methods=["PATCH"])
+@login_required
+def patch_eisenhower(issue_id):
+    issue = db.get_or_404(Issue, issue_id)
+    val = (request.get_json() or {}).get("eisenhower")
+    issue.eisenhower = val if val in VALID_EISENHOWER else None
     db.session.commit()
     return jsonify(issue.to_dict()), 200
 

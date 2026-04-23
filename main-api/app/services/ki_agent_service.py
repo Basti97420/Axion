@@ -143,11 +143,12 @@ READ_ACTIONS = {
 }
 WRITE_ACTIONS = {
     'create_issue', 'update_issue', 'add_comment',
+    'set_assignee', 'set_due_date',
     'create_wiki_page', 'update_wiki_page',
     'create_milestone', 'update_milestone',
     'add_tag', 'remove_tag', 'create_tag',
     'create_subtask', 'assign_milestone', 'set_dependency',
-    'add_worklog', 'create_milestone',
+    'add_worklog',
 }
 ADMIN_ACTIONS = {
     'create_python_script', 'run_python_script',
@@ -373,8 +374,10 @@ AGENT_SYSTEM_PROMPT = """Du bist ein autonomer KI-Agent im Projektmanagement-Sys
 Du antwortest IMMER auf Deutsch und als valides JSON.
 
 Du kannst folgende Aktionen ausführen:
+
+# Schreib-Aktionen:
 - create_issue: Neues Issue erstellen
-- update_issue: Issue-Status/Priorität/Titel/Beschreibung ändern
+- update_issue: Issue-Status/Priorität/Titel/Beschreibung/Eisenhower ändern
 - add_comment: Kommentar zu einem Issue hinzufügen
 - set_assignee: Issue zuweisen
 - set_due_date: Fälligkeitsdatum setzen
@@ -382,8 +385,17 @@ Du kannst folgende Aktionen ausführen:
 - create_wiki_page: Wiki-Seite erstellen
 - update_wiki_page: Wiki-Seite aktualisieren
 - create_milestone: Meilenstein erstellen
+- update_milestone: Bestehenden Meilenstein aktualisieren
+- assign_milestone: Issue einem Meilenstein zuweisen
 - create_file: Datei im Workspace erstellen (.md, .txt, .csv)
 - trigger_agent: Anderen Agenten im Projekt starten
+
+# Lese-Aktionen (du bekommst die Daten automatisch zurück):
+- search_issues: Issues projektübergreifend suchen
+- read_issue: Ein Issue vollständig lesen inkl. Kommentare
+- read_wiki_page: Eine Wiki-Seite lesen
+- search_wiki: Wiki nach einem Begriff durchsuchen
+- list_projects: Alle Projekte auflisten
 
 Antworte IMMER als valides JSON:
 {"reply": "Zusammenfassung was du getan hast", "action": null}
@@ -391,19 +403,32 @@ Antworte IMMER als valides JSON:
 Oder mit Aktion:
 {"reply": "...", "action": {"type": "create_issue", "data": {"title": "...", "description": "...", "type": "bug", "priority": "high"}}}
 {"reply": "...", "action": {"type": "update_issue", "issue_id": 5, "data": {"status": "done"}}}
+{"reply": "...", "action": {"type": "update_issue", "issue_id": 5, "data": {"eisenhower": "do_first"}}}
 {"reply": "...", "action": {"type": "add_comment", "issue_id": 5, "data": {"content": "..."}}}
-{"reply": "...", "action": {"type": "create_wiki_page", "data": {"title": "...", "content": "Markdown"}}}
 {"reply": "...", "action": {"type": "set_assignee", "issue_id": 5, "data": {"assignee_id": 2}}}
 {"reply": "...", "action": {"type": "set_due_date", "issue_id": 5, "data": {"due_date": "2026-04-15"}}}
 {"reply": "...", "action": {"type": "add_worklog", "issue_id": 5, "data": {"hours": 2.5, "description": "Arbeit"}}}
 {"reply": "...", "action": {"type": "create_milestone", "data": {"name": "v1.0", "due_date": "2026-05-01"}}}
+{"reply": "...", "action": {"type": "update_milestone", "data": {"milestone_id": 2, "name": "v2.0", "due_date": "2026-06-01"}}}
+{"reply": "...", "action": {"type": "assign_milestone", "issue_id": 5, "data": {"milestone_id": 2}}}
+{"reply": "...", "action": {"type": "create_wiki_page", "data": {"title": "...", "content": "Markdown"}}}
 {"reply": "...", "action": {"type": "create_file", "data": {"filename": "bericht.md", "content": "# Inhalt"}}}
 {"reply": "...", "action": {"type": "trigger_agent", "data": {"agent_id": 2}}}
+{"reply": "Ich suche...", "action": {"type": "search_issues", "data": {"query": "login", "status": "open"}}}
+{"reply": "Ich lese...", "action": {"type": "read_issue", "data": {"issue_id": 5}}}
+{"reply": "Ich lese...", "action": {"type": "read_wiki_page", "data": {"slug": "seitenname"}}}
 
 Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Prioritäten: low, medium, high, critical
 Typen: task, bug, story, epic
 Erlaubte Dateiendungen: .md, .txt, .csv
+
+Eisenhower-Matrix (eisenhower-Feld bei update_issue):
+- do_first:  Wichtig + Dringend → sofort erledigen (Q1)
+- schedule:  Wichtig + Nicht dringend → einplanen (Q2)
+- delegate:  Nicht wichtig + Dringend → delegieren (Q3)
+- eliminate: Nicht wichtig + Nicht dringend → eliminieren (Q4)
+- null: nicht gesetzt
 
 WICHTIG – Gedächtnis:
 Am Ende jedes Runs aktualisierst du deine memory.md im Workspace mit:
@@ -494,12 +519,36 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
         output_parts.append(reply)
 
         # Bis zu 5 Aktionen ausführen (Loop für Folgeantworten)
+        READ_ACTIONS_AGENT = (
+            'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects',
+            'list_wiki_pages', 'read_issue',
+        )
         for _ in range(5):
             if not action or not isinstance(action, dict):
                 break
             action_type = action.get('type')
             if not action_type or action_type == 'none':
                 break
+
+            # Lese-Aktionen: zweistufig (Daten holen, dann KI erneut mit Daten)
+            if action_type in READ_ACTIONS_AGENT:
+                from app.routes.ai import _fetch_context_for_ai
+                fetched = _fetch_context_for_ai(action)
+                if fetched:
+                    messages.append({'role': 'assistant', 'content': raw})
+                    messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nFahre mit dem ursprünglichen Auftrag fort.'})
+                    try:
+                        raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
+                        total_tokens_in += t_in
+                        total_tokens_out += t_out
+                        ai_resp = json.loads(raw)
+                    except Exception:
+                        break
+                    reply = ai_resp.get('reply') or reply
+                    output_parts.append(f'\n↻ Daten abgerufen ({action_type})')
+                    actions_log.append({'type': action_type, 'result': {'type': 'read_done'}, 'verified': True, 'retries': 0})
+                    action = ai_resp.get('action')
+                    continue
 
             # Rolle prüfen
             if not _is_action_allowed(agent, action_type):
@@ -561,7 +610,8 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
 
             # Folgeantwort holen
             messages.append({'role': 'assistant', 'content': raw})
-            messages.append({'role': 'user', 'content': f'Aktion `{action_type}` abgeschlossen. Gibt es weitere Aktionen?'})
+            follow = f'Aktion abgeschlossen: {json.dumps(result or {}, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. Wenn alles erledigt ist, antworte mit action: null.'
+            messages.append({'role': 'user', 'content': follow})
             try:
                 raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
                 total_tokens_in += t_in

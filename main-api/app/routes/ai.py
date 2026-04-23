@@ -554,7 +554,7 @@ def _execute_action(action, user_id, context=None):
         return {'type': 'dependency_set', 'issue_id': issue.id, 'blocks': target.id}
 
     if action_type == 'update_issue':
-        allowed = {'status', 'priority', 'title', 'description'}
+        allowed = {'status', 'priority', 'title', 'description', 'eisenhower'}
         changes = {}
         for field in allowed:
             if field in action_data:
