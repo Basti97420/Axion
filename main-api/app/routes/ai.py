@@ -951,7 +951,7 @@ def chat():
             action = None  # Keine weitere Aktion nach Read
 
     SCRIPT_ACTIONS = ('create_python_script', 'run_python_script')
-    KI_AGENT_ACTIONS = ('create_ki_agent', 'run_ki_agent')
+    KI_AGENT_ACTIONS = ('create_ki_agent', 'run_ki_agent', 'save_memory')
 
     def _dispatch_action(act):
         if act.get('type') in SCRIPT_ACTIONS:

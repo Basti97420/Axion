@@ -388,22 +388,160 @@ def _cmd_status(token: str, chat_id: str) -> None:
 
 
 def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
+    """KI-Assistent mit vollständigem Aktions-Support (create_issue, save_memory, read_memory, etc.)"""
     if not frage.strip():
         _send(token, chat_id, '⚠ Bitte eine Frage angeben: /ki Was sind offene Bugs?')
         return
     stop_typing = threading.Event()
     threading.Thread(target=_typing_loop, args=(token, chat_id, stop_typing), daemon=True).start()
     try:
+        import json as _json
+        import os as _os
+        from datetime import date as _date, timedelta
+        from flask import current_app
+        from app.models.user import User
         from app.models.issue import Issue
-        issues = Issue.query.filter(Issue.status.notin_(['done', 'cancelled'])).all()
-        context = 'Offene Issues im System:\n' + '\n'.join(
-            f'  #{i.id} [{i.status}][{i.priority}] {i.title}' for i in issues
-        ) if issues else 'Keine offenen Issues.'
-        full_message = f'{context}\n\nFrage: {frage}'
-        reply = _ai_reply(full_message, chat_id)
+        from app.routes.ai import (
+            SYSTEM_PROMPT_TEMPLATE, _get_ai_reply, _fetch_context_for_ai,
+            _execute_action, _execute_python_script_action, _execute_ki_agent_action,
+        )
+
+        # System-User für Aktionsausführung
+        admin = User.query.filter_by(is_admin=True).first()
+        user_id = admin.id if admin else 1
+
+        # Vollständigen System-Prompt aufbauen
+        today = _date.today()
+        next_week = (today + timedelta(days=7)).isoformat()
+        system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
+            date=today.isoformat(),
+            user_name=f'Telegram ({admin.name if admin else "Bot"})',
+            user_id=user_id,
+            next_week=next_week,
+        )
+
+        # Projekt-Kontext
+        cfg = load_tg_config()
+        project_id = cfg.get('default_project_id')
+        action_context = {'project_id': project_id}
+        context_parts = []
+
+        if project_id:
+            from app.models.project import Project
+            proj = Project.query.get(project_id)
+            if proj:
+                context_parts.append(f'Aktuelles Projekt: {proj.name} (ID: {project_id})')
+            issues = Issue.query.filter_by(project_id=project_id).all()
+            if issues:
+                lines = ['Issues im Projekt:']
+                for iss in issues:
+                    lines.append(f'  #{iss.id} [{iss.status}] [{iss.priority}] {iss.title}')
+                context_parts.append('\n'.join(lines))
+
+        # Chat-Workspace: anweisungen.md immer laden, andere Dateien als Namen listen
+        try:
+            workspace_dir = _os.path.join(current_app.instance_path, 'chat-workspace')
+            if _os.path.isdir(workspace_dir):
+                anw_path = _os.path.join(workspace_dir, 'anweisungen.md')
+                if _os.path.isfile(anw_path):
+                    with open(anw_path, 'r', encoding='utf-8') as f:
+                        anw = f.read().strip()
+                    if anw:
+                        system_prompt += f'\n\n## Deine Anweisungen (anweisungen.md)\n{anw}'
+                mem_files = [fn for fn in _os.listdir(workspace_dir)
+                             if fn != 'anweisungen.md'
+                             and _os.path.splitext(fn)[1].lower() in ('.md', '.txt', '.csv')]
+                if mem_files:
+                    context_parts.append('Verfügbare Memories (per read_memory lesbar): ' + ', '.join(sorted(mem_files)))
+        except Exception:
+            pass
+
+        # Telegram-Chatverlauf als Kontext
+        ctx_text = _build_telegram_context(chat_id)
+        if ctx_text:
+            context_parts.append(ctx_text)
+
+        system_content = system_prompt
+        if context_parts:
+            system_content += '\n\n' + '\n\n'.join(context_parts)
+
+        messages = [
+            {'role': 'system', 'content': system_content},
+            {'role': 'user', 'content': frage},
+        ]
+
+        raw = _get_ai_reply(messages)
+        try:
+            ai_resp = _json.loads(raw)
+        except Exception:
+            ai_resp = {'reply': raw, 'action': None}
+
+        reply = ai_resp.get('reply') or raw
+        action = ai_resp.get('action')
+
+        READ_ACTIONS = (
+            'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
+            'read_issue', 'read_script_output', 'read_agent_output', 'read_memory',
+        )
+        SCRIPT_ACTIONS = ('create_python_script', 'run_python_script')
+        KI_AGENT_ACTIONS_TG = ('create_ki_agent', 'run_ki_agent', 'save_memory')
+
+        def dispatch(act):
+            t = act.get('type')
+            if t in SCRIPT_ACTIONS:
+                return _execute_python_script_action(t, act.get('data') or {}, action_context)
+            if t in KI_AGENT_ACTIONS_TG:
+                return _execute_ki_agent_action(t, act.get('data') or {}, action_context)
+            return _execute_action(act, user_id, action_context)
+
+        # Zweistufig für Lese-Aktionen
+        if action and isinstance(action, dict) and action.get('type') in READ_ACTIONS:
+            fetched = _fetch_context_for_ai(action)
+            if fetched:
+                messages.append({'role': 'assistant', 'content': raw})
+                messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nBeantworte nun die Frage auf Basis dieser Informationen.'})
+                try:
+                    raw2 = _get_ai_reply(messages)
+                    ai_resp2 = _json.loads(raw2)
+                except Exception:
+                    ai_resp2 = {'reply': fetched, 'action': None}
+                reply = ai_resp2.get('reply') or raw2
+                action = None
+
+        # Aktions-Loop (bis zu 4 Folgeaktionen)
+        if action and isinstance(action, dict) and action.get('type') not in (None, 'none'):
+            dispatch(action)
+            for _ in range(4):
+                messages.append({'role': 'assistant', 'content': raw})
+                follow = f'Aktion abgeschlossen: {_json.dumps(ai_resp.get("action") or {}, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen aus. Wenn alles erledigt ist, antworte mit action: null.'
+                messages.append({'role': 'user', 'content': follow})
+                try:
+                    raw = _get_ai_reply(messages)
+                    ai_resp = _json.loads(raw)
+                except Exception:
+                    break
+                next_action = ai_resp.get('action')
+                if not next_action or not isinstance(next_action, dict):
+                    break
+                if next_action.get('type') in (None, 'none'):
+                    break
+                if next_action.get('type') in READ_ACTIONS:
+                    fetched = _fetch_context_for_ai(next_action)
+                    if fetched:
+                        messages.append({'role': 'assistant', 'content': raw})
+                        messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nFahre fort.'})
+                        try:
+                            raw = _get_ai_reply(messages)
+                            ai_resp = _json.loads(raw)
+                        except Exception:
+                            break
+                else:
+                    dispatch(next_action)
+                reply = ai_resp.get('reply') or reply
+
         _send(token, chat_id, f'🤖 {reply}')
     except Exception as e:
-        logger.error('Telegram /ki Fehler: %s', e)
+        logger.error('Telegram KI Fehler: %s', e)
         _send(token, chat_id, f'❌ KI-Fehler: {e}')
     finally:
         stop_typing.set()
