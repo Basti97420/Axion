@@ -4,6 +4,7 @@ import { userSettingsApi } from '../api/userSettingsApi'
 import { settingsApi } from '../api/settingsApi'
 import { telegramSettingsApi } from '../api/telegramSettingsApi'
 import { projectsApi } from '../api/projectsApi'
+import { chatWorkspaceApi } from '../api/chatWorkspaceApi'
 import PasswordModal from '../components/common/PasswordModal'
 import { setUserTimezone } from '../utils/dateUtils'
 import { useToastStore } from '../store/toastStore'
@@ -96,6 +97,14 @@ export default function UserSettingsPage() {
   const [backupList, setBackupList] = useState([])
   const [backupTriggering, setBackupTriggering] = useState(false)
 
+  // KI Chat-Dateien
+  const [chatFiles, setChatFiles] = useState([])
+  const [chatExpanded, setChatExpanded] = useState(null)       // filename | null
+  const [chatContents, setChatContents] = useState({})         // { filename: string }
+  const [chatSaving, setChatSaving] = useState({})             // { filename: bool }
+  const [chatLoading, setChatLoading] = useState({})           // { filename: bool }
+  const [chatFilesMsg, setChatFilesMsg] = useState(null)
+
   // Persönliche Einstellungen laden
   useEffect(() => {
     userSettingsApi.get()
@@ -125,6 +134,73 @@ export default function UserSettingsPage() {
       .then(({ data }) => setProjects(data))
       .catch(() => {})
   }, [user])
+
+  // Chat-Dateien laden
+  useEffect(() => {
+    chatWorkspaceApi.listFiles()
+      .then(({ data }) => setChatFiles(data))
+      .catch(() => {})
+  }, [])
+
+  async function loadChatFile(filename) {
+    if (chatContents[filename] !== undefined) {
+      setChatExpanded(chatExpanded === filename ? null : filename)
+      return
+    }
+    setChatLoading((l) => ({ ...l, [filename]: true }))
+    try {
+      const { data } = await chatWorkspaceApi.getFile(filename)
+      setChatContents((c) => ({ ...c, [filename]: data.content }))
+      setChatExpanded(filename)
+    } catch { /* ignore */ }
+    finally { setChatLoading((l) => ({ ...l, [filename]: false })) }
+  }
+
+  async function saveChatFile(filename) {
+    setChatSaving((s) => ({ ...s, [filename]: true }))
+    try {
+      await chatWorkspaceApi.saveFile(filename, chatContents[filename] ?? '')
+      setChatFilesMsg({ type: 'success', text: `${filename} gespeichert` })
+      // Dateiliste neu laden (size/modified_at aktualisiert)
+      const { data } = await chatWorkspaceApi.listFiles()
+      setChatFiles(data)
+    } catch (e) {
+      setChatFilesMsg({ type: 'error', text: e.response?.data?.error || 'Speichern fehlgeschlagen' })
+    } finally {
+      setChatSaving((s) => ({ ...s, [filename]: false }))
+      setTimeout(() => setChatFilesMsg(null), 3000)
+    }
+  }
+
+  async function deleteChatFile(filename) {
+    if (!await showConfirm(`Datei "${filename}" wirklich löschen?`)) return
+    try {
+      await chatWorkspaceApi.deleteFile(filename)
+      setChatFiles((f) => f.filter((x) => x.filename !== filename))
+      if (chatExpanded === filename) setChatExpanded(null)
+      setChatContents((c) => { const n = { ...c }; delete n[filename]; return n })
+    } catch (e) {
+      setChatFilesMsg({ type: 'error', text: e.response?.data?.error || 'Löschen fehlgeschlagen' })
+      setTimeout(() => setChatFilesMsg(null), 3000)
+    }
+  }
+
+  async function createChatFile() {
+    const raw = window.prompt('Dateiname (z.B. notizen.md, todo.txt):')
+    if (!raw) return
+    const filename = raw.trim()
+    if (!filename) return
+    try {
+      await chatWorkspaceApi.saveFile(filename, '')
+      const { data } = await chatWorkspaceApi.listFiles()
+      setChatFiles(data)
+      setChatContents((c) => ({ ...c, [filename]: '' }))
+      setChatExpanded(filename)
+    } catch (e) {
+      setChatFilesMsg({ type: 'error', text: e.response?.data?.error || 'Datei konnte nicht angelegt werden' })
+      setTimeout(() => setChatFilesMsg(null), 3000)
+    }
+  }
 
   // Auto-hide Meldungen
   useEffect(() => {
@@ -367,6 +443,89 @@ export default function UserSettingsPage() {
 
         <SaveRow saving={saving} message={message} />
       </form>
+
+      {/* ── KI Chat-Dateien ── */}
+      <section>
+        <h2 className="text-base font-semibold text-gray-800 mb-1 pb-2 border-b border-gray-200">KI Chat-Dateien</h2>
+        <p className="text-xs text-gray-500 mb-4">
+          <strong>anweisungen.md</strong> wird bei jedem Chat automatisch geladen. Weitere Dateien kann die KI bei Bedarf selbst lesen und anlegen — so sparst du Tokens.
+        </p>
+
+        {chatFilesMsg && (
+          <p className={`text-sm mb-3 ${chatFilesMsg.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+            {chatFilesMsg.type === 'success' ? '✓' : '⚠'} {chatFilesMsg.text}
+          </p>
+        )}
+
+        {chatFiles.length === 0 ? (
+          <p className="text-xs text-gray-400 mb-3">Noch keine Dateien. Lege jetzt eine an.</p>
+        ) : (
+          <div className="space-y-2 mb-3">
+            {/* anweisungen.md immer oben */}
+            {[
+              ...chatFiles.filter((f) => f.filename === 'anweisungen.md'),
+              ...chatFiles.filter((f) => f.filename !== 'anweisungen.md'),
+            ].map((file) => {
+              const isAnweisungen = file.filename === 'anweisungen.md'
+              const isOpen = chatExpanded === file.filename
+              return (
+                <div key={file.filename} className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-2 px-3 py-2 bg-gray-50">
+                    <span className="text-sm">{isAnweisungen ? '📌' : '📄'}</span>
+                    <span className="text-sm font-medium text-gray-800 flex-1 truncate">{file.filename}</span>
+                    {isAnweisungen && (
+                      <span className="text-xs text-primary-600 bg-primary-50 px-1.5 py-0.5 rounded-full shrink-0">
+                        immer geladen
+                      </span>
+                    )}
+                    <button
+                      onClick={() => loadChatFile(file.filename)}
+                      disabled={chatLoading[file.filename]}
+                      className="text-xs text-primary-600 hover:text-primary-800 shrink-0"
+                    >
+                      {chatLoading[file.filename] ? '…' : isOpen ? '▲ Einklappen' : '▼ Bearbeiten'}
+                    </button>
+                    <button
+                      onClick={() => deleteChatFile(file.filename)}
+                      className="text-xs text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                      title="Löschen"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  {isOpen && (
+                    <div className="px-3 py-2 border-t border-gray-100 bg-white">
+                      <textarea
+                        value={chatContents[file.filename] ?? ''}
+                        onChange={(e) => setChatContents((c) => ({ ...c, [file.filename]: e.target.value }))}
+                        rows={10}
+                        className="w-full text-sm font-mono border border-gray-200 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-primary-500 resize-y"
+                        placeholder={isAnweisungen ? 'Anweisungen für die KI eingeben…' : 'Dateiinhalt…'}
+                      />
+                      <div className="flex justify-end mt-2">
+                        <button
+                          onClick={() => saveChatFile(file.filename)}
+                          disabled={chatSaving[file.filename]}
+                          className="px-3 py-1.5 text-xs font-medium bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+                        >
+                          {chatSaving[file.filename] ? 'Speichere…' : '💾 Speichern'}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <button
+          onClick={createChatFile}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 hover:bg-primary-100 border border-primary-200 rounded-lg transition-colors"
+        >
+          + Neue Datei anlegen
+        </button>
+      </section>
 
       {/* ── Admin-Sektionen ── */}
       {user?.is_admin && (

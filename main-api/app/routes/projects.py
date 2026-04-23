@@ -163,6 +163,8 @@ def update_status(project_id, status_id):
 @login_required
 def delete_status(project_id, status_id):
     status = ProjectStatus.query.filter_by(id=status_id, project_id=project_id).first_or_404()
+    if status.key == 'open':
+        return jsonify({"error": "Der Status \"Offen\" ist systemreserviert und kann nicht gelöscht werden (wird vom Telegram-Bot und für neue Issues benötigt)."}), 400
     from app.models.issue import Issue
     in_use = Issue.query.filter_by(project_id=project_id, status=status.key).count()
     if in_use:

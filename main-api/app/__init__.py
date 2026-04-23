@@ -46,6 +46,7 @@ def create_app():
     from .routes.calendar_sync import bp as calendar_sync_bp
     from .routes.ki_agents import bp as ki_agents_bp
     from .routes.python_scripts import bp as python_scripts_bp, internal_bp as internal_scripts_bp
+    from .routes.chat_workspace import bp as chat_workspace_bp
 
     app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50 MB (Wiki-Uploads)
 
@@ -78,6 +79,7 @@ def create_app():
     app.register_blueprint(ki_agents_bp)
     app.register_blueprint(python_scripts_bp)
     app.register_blueprint(internal_scripts_bp)
+    app.register_blueprint(chat_workspace_bp)
 
     @login_manager.unauthorized_handler
     def unauthorized():

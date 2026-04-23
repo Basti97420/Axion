@@ -3,7 +3,7 @@ import json
 import threading
 import requests as http
 from datetime import date as _date
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 from app import db
 from app.models.issue import Issue
@@ -83,6 +83,12 @@ Wenn du eine Aktion ausführst:
 {{"reply": "Ich lese Issue #5 zur Überprüfung...", "action": {{"type": "read_issue", "data": {{"issue_id": 5}}}}}}
 {{"reply": "Ich prüfe den Script-Output...", "action": {{"type": "read_script_output", "data": {{"script_id": 3}}}}}}
 {{"reply": "Ich prüfe den Agenten-Output...", "action": {{"type": "read_agent_output", "data": {{"agent_id": 2}}}}}}
+
+- save_memory: Inhalt dauerhaft in einer Datei im Chat-Workspace speichern
+- read_memory: Eine Memory-Datei lesen — du bekommst dann den Inhalt (wie read_wiki_page)
+
+{{"reply": "Ich merke mir...", "action": {{"type": "save_memory", "data": {{"filename": "todo.md", "content": "# Offene Punkte\n- ..."}}}}}},
+{{"reply": "Ich lese...", "action": {{"type": "read_memory", "data": {{"filename": "todo.md"}}}}}}
 
 Verfügbare Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Verfügbare Prioritäten: low, medium, high, critical
@@ -255,6 +261,22 @@ def _fetch_context_for_ai(action):
             if r.output:
                 lines.append(f'Output:\n{r.output[:2000]}{"..." if len(r.output) > 2000 else ""}')
         return '\n'.join(lines)
+
+    if action_type == 'read_memory':
+        from flask import current_app
+        from werkzeug.utils import secure_filename
+        filename = secure_filename((data.get('filename') or '').strip())
+        if not filename:
+            return 'Dateiname fehlt.'
+        fpath = os.path.join(current_app.instance_path, 'chat-workspace', filename)
+        if not os.path.isfile(fpath):
+            return f'Memory-Datei "{filename}" nicht gefunden. Verfügbare Dateien per save_memory anlegen.'
+        try:
+            with open(fpath, 'r', encoding='utf-8') as f:
+                content = f.read()
+            return f'# Inhalt von {filename}\n\n{content}'
+        except Exception as e:
+            return f'Fehler beim Lesen von "{filename}": {e}'
 
     return None
 
@@ -654,6 +676,23 @@ def _execute_ki_agent_action(action_type, action_data, context):
         threading.Thread(target=run_agent, args=(app, agent.id, run.id, 'ki'), daemon=True).start()
         return {'type': 'ki_agent_started', 'agent_id': agent.id, 'run_id': run.id}
 
+    if action_type == 'save_memory':
+        from flask import current_app
+        from werkzeug.utils import secure_filename
+        filename = secure_filename((action_data.get('filename') or '').strip())
+        if not filename:
+            return {'type': 'error', 'message': 'Dateiname fehlt'}
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in ('.md', '.txt', '.csv'):
+            return {'type': 'error', 'message': 'Nur .md, .txt, .csv erlaubt'}
+        workspace = os.path.join(current_app.instance_path, 'chat-workspace')
+        os.makedirs(workspace, exist_ok=True)
+        fpath = os.path.join(workspace, filename)
+        content = action_data.get('content', '')
+        with open(fpath, 'w', encoding='utf-8') as f:
+            f.write(content)
+        return {'type': 'memory_saved', 'filename': filename}
+
     return None
 
 
@@ -845,6 +884,27 @@ def chat():
                 f'  Inhalt:\n{page.content or ""}'
             )
 
+    # Chat-Workspace: anweisungen.md immer laden, andere Dateien als Namen listen
+    try:
+        workspace_dir = os.path.join(current_app.instance_path, 'chat-workspace')
+        if os.path.isdir(workspace_dir):
+            anweisungen_path = os.path.join(workspace_dir, 'anweisungen.md')
+            if os.path.isfile(anweisungen_path):
+                with open(anweisungen_path, 'r', encoding='utf-8') as f:
+                    anweisungen = f.read().strip()
+                if anweisungen:
+                    system_prompt += f'\n\n## Deine Anweisungen (anweisungen.md)\n{anweisungen}'
+            memory_files = [
+                fn for fn in os.listdir(workspace_dir)
+                if fn != 'anweisungen.md' and os.path.splitext(fn)[1].lower() in ('.md', '.txt', '.csv')
+            ]
+            if memory_files:
+                context_parts.append(
+                    'Verfügbare Memories (per read_memory lesbar): ' + ', '.join(sorted(memory_files))
+                )
+    except Exception:
+        pass
+
     system_content = system_prompt
     if context_parts:
         system_content += '\n\n' + '\n\n'.join(context_parts)
@@ -872,7 +932,7 @@ def chat():
     # Zweistufiger Ablauf für Lese-/Suchaktionen
     READ_ACTIONS = (
         'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
-        'read_issue', 'read_script_output', 'read_agent_output',
+        'read_issue', 'read_script_output', 'read_agent_output', 'read_memory',
     )
     if action and isinstance(action, dict) and action.get('type') in READ_ACTIONS:
         fetched_context = _fetch_context_for_ai(action)
