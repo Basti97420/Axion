@@ -516,7 +516,7 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
         reply = ai_resp.get('reply') or raw
         action = ai_resp.get('action')
 
-        output_parts.append(reply)
+        output_parts.append(f'💭 {reply}')
 
         # Bis zu 5 Aktionen ausführen (Loop für Folgeantworten)
         READ_ACTIONS_AGENT = (
@@ -545,8 +545,10 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                     except Exception:
                         break
                     reply = ai_resp.get('reply') or reply
-                    output_parts.append(f'\n↻ Daten abgerufen ({action_type})')
-                    actions_log.append({'type': action_type, 'result': {'type': 'read_done'}, 'verified': True, 'retries': 0})
+                    output_parts.append(f'\n\n↻ **Daten abgerufen ({action_type})**')
+                    if reply:
+                        output_parts.append(f'\n💭 {reply}')
+                    actions_log.append({'type': action_type, 'thinking': reply, 'result': {'type': 'read_done'}, 'verified': True, 'retries': 0})
                     action = ai_resp.get('action')
                     continue
 
@@ -593,20 +595,24 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                 output_parts.append(f'\n✅ Bestätigung erhalten für `{action_type}` — wird ausgeführt.')
 
             # Aktion mit Retry ausführen
+            current_thinking = reply  # Denk-Schritt der zu dieser Aktion geführt hat
             result, verified, retries, err = _run_action_with_retry(action, agent, agent_id, exec_context)
             if err:
-                actions_log.append({'type': action_type, 'result': result, 'verified': False, 'retries': retries, 'error': err})
-                output_parts.append(f'\n❌ Aktion `{action_type}` fehlgeschlagen: {err}')
+                actions_log.append({'type': action_type, 'thinking': current_thinking, 'result': result, 'verified': False, 'retries': retries, 'error': err})
+                output_parts.append(f'\n\n❌ **Aktion `{action_type}` fehlgeschlagen:** {err}')
             elif not verified:
-                actions_log.append({'type': action_type, 'result': result, 'verified': False, 'retries': retries, 'error': 'Verifikation fehlgeschlagen'})
-                output_parts.append(f'\n❌ Aktion `{action_type}` nach {retries} Versuchen nicht verifiziert.')
+                actions_log.append({'type': action_type, 'thinking': current_thinking, 'result': result, 'verified': False, 'retries': retries, 'error': 'Verifikation fehlgeschlagen'})
+                output_parts.append(f'\n\n❌ **Aktion `{action_type}`** nach {retries} Versuchen nicht verifiziert.')
             else:
-                actions_log.append({'type': action_type, 'result': result, 'verified': True, 'retries': retries})
-                output_parts.append(f'\n✅ `{action_type}` verifiziert (nach {retries} Versuchen).')
+                actions_log.append({'type': action_type, 'thinking': current_thinking, 'result': result, 'verified': True, 'retries': retries})
+                result_summary = ''
+                if isinstance(result, dict):
+                    if result.get('id'):
+                        result_summary = f' → #{result["id"]}'
+                    elif result.get('title'):
+                        result_summary = f' → „{result["title"]}"'
+                output_parts.append(f'\n\n✅ **`{action_type}`{result_summary}**')
             _save_checkpoint(agent, workspace_dir, len(actions_log), action_type, result, verified, retries, output_parts)
-
-            if result:
-                output_parts.append(f'\nAktion ausgeführt: `{action_type}` → {json.dumps(result, ensure_ascii=False)}')
 
             # Folgeantwort holen
             messages.append({'role': 'assistant', 'content': raw})
@@ -619,6 +625,9 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                 ai_resp = json.loads(raw)
             except Exception:
                 break
+            reply = ai_resp.get('reply') or ''
+            if reply:
+                output_parts.append(f'\n\n💭 {reply}')
             action = ai_resp.get('action')
 
         final_output = '\n'.join(output_parts)

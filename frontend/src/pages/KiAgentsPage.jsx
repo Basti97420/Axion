@@ -413,41 +413,109 @@ function FileList({ agentId, refreshKey }) {
   )
 }
 
+function RunItem({ run }) {
+  const [expanded, setExpanded] = useState(false)
+  const [actionsOpen, setActionsOpen] = useState(false)
+
+  const actions = (() => {
+    try { return JSON.parse(run.actions || '[]') } catch { return [] }
+  })()
+
+  const PREVIEW_LEN = 300
+  const needsExpand = (run.output || '').length > PREVIEW_LEN
+
+  return (
+    <li className="border border-gray-200 rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="flex items-center justify-between px-3 py-2.5">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500">{formatDateTime(run.started_at)}</span>
+          {run.triggered_by === 'chain'     && <span title="Agenten-Kette">🔗</span>}
+          {run.triggered_by === 'scheduler' && <span title="Scheduler">⏱</span>}
+          {run.triggered_by === 'retry'     && <span title="Retry">🔄</span>}
+          {(run.tokens_in > 0 || run.tokens_out > 0) && (
+            <span className="text-[10px] text-gray-400 ml-1">
+              🔢 {(run.tokens_in + run.tokens_out).toLocaleString()} Tokens
+            </span>
+          )}
+        </div>
+        <span className={`text-xs font-semibold ${run.error ? 'text-red-600' : 'text-green-600'}`}>
+          {run.error ? '✗ Fehler' : '✓ OK'}
+        </span>
+      </div>
+
+      {/* Fehler */}
+      {run.error && (
+        <p className="text-xs text-red-500 px-3 pb-2">{run.error}</p>
+      )}
+
+      {/* Output */}
+      {run.output && (
+        <div className="border-t border-gray-100 px-3 py-2 bg-gray-50">
+          <div className="prose prose-sm max-w-none text-xs">
+            <ReactMarkdown>
+              {expanded ? run.output : run.output.slice(0, PREVIEW_LEN)}
+            </ReactMarkdown>
+          </div>
+          {needsExpand && (
+            <button
+              onClick={() => setExpanded((v) => !v)}
+              className="mt-1 text-[10px] text-primary-600 hover:text-primary-800"
+            >
+              {expanded ? '▲ Weniger anzeigen' : `▼ Mehr anzeigen (${run.output.length.toLocaleString()} Zeichen)`}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Aktions-Log */}
+      {actions.length > 0 && (
+        <div className="border-t border-gray-100">
+          <button
+            onClick={() => setActionsOpen((v) => !v)}
+            className="w-full flex items-center gap-1.5 px-3 py-1.5 text-[10px] text-gray-500 hover:bg-gray-50 text-left"
+          >
+            <svg
+              className={`w-1.5 h-1.5 shrink-0 transition-transform ${actionsOpen ? 'rotate-90' : ''}`}
+              fill="currentColor" viewBox="0 0 6 10"
+            ><path d="M0 0l6 5-6 5V0z" /></svg>
+            {actions.length} Aktion{actions.length !== 1 ? 'en' : ''} ausgeführt
+          </button>
+          {actionsOpen && (
+            <div className="px-3 pb-2 space-y-2">
+              {actions.map((a, idx) => (
+                <div key={idx} className="text-[10px] border border-gray-100 rounded p-2 bg-white">
+                  <div className="flex items-center gap-1.5 mb-1">
+                    <span className={a.verified ? 'text-green-600' : 'text-red-500'}>
+                      {a.verified ? '✅' : '❌'}
+                    </span>
+                    <span className="font-mono font-semibold text-gray-700">{a.type}</span>
+                    {a.retries > 0 && (
+                      <span className="text-gray-400">(🔄 {a.retries}×)</span>
+                    )}
+                  </div>
+                  {a.thinking && (
+                    <p className="text-gray-500 italic mb-1 leading-relaxed">💭 {a.thinking}</p>
+                  )}
+                  {a.error && (
+                    <p className="text-red-500 mt-0.5">{a.error}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function RunList({ runs }) {
   if (!runs.length) return <p className="text-xs text-gray-400">Noch keine Runs.</p>
 
   return (
     <ul className="space-y-2">
-      {runs.map((run) => (
-        <li key={run.id} className="border border-gray-200 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-gray-500">{formatDateTime(run.started_at)}</span>
-              {run.triggered_by === 'chain' && <span title="Durch Agenten-Kette gestartet">🔗</span>}
-              {run.triggered_by === 'scheduler' && <span title="Durch Scheduler gestartet">⏱</span>}
-              {run.triggered_by === 'retry' && <span title="Retry-Versuch">🔄</span>}
-            </div>
-            <span className={`text-xs font-medium ${run.error ? 'text-red-600' : 'text-green-600'}`}>
-              {run.error ? `✗ Fehler` : `✓ OK`}
-            </span>
-          </div>
-          {run.error && <p className="text-xs text-red-500 mb-1">{run.error}</p>}
-          {(run.tokens_in > 0 || run.tokens_out > 0) && (
-            <p className="text-xs text-gray-400 mb-1">
-              🔢 {(run.tokens_in + run.tokens_out).toLocaleString()} Tokens
-              <span className="text-gray-300 ml-1">
-                (↑{run.tokens_in.toLocaleString()} ↓{run.tokens_out.toLocaleString()})
-              </span>
-            </p>
-          )}
-          {run.output && (
-            <div className="prose prose-sm max-w-none text-xs mt-1">
-              <ReactMarkdown>{run.output.slice(0, 400)}</ReactMarkdown>
-              {run.output.length > 400 && <span className="text-gray-400">…</span>}
-            </div>
-          )}
-        </li>
-      ))}
+      {runs.map((run) => <RunItem key={run.id} run={run} />)}
     </ul>
   )
 }

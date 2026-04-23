@@ -12,7 +12,16 @@ export default function AiChatPanel() {
 
   const [input, setInput] = useState('')
   const [aiStatus, setAiStatus] = useState(null)
+  const [expandedActions, setExpandedActions] = useState({})
   const messagesEndRef = useRef(null)
+
+  function toggleOuter(idx) {
+    setExpandedActions((p) => ({ ...p, [idx]: !p[idx] }))
+  }
+  function toggleInner(msgIdx, actionIdx) {
+    const key = `${msgIdx}-${actionIdx}`
+    setExpandedActions((p) => ({ ...p, [key]: !p[key] }))
+  }
 
   useEffect(() => {
     if (isOpen) {
@@ -144,42 +153,64 @@ export default function AiChatPanel() {
               }`}>
                 <p className="whitespace-pre-wrap leading-relaxed">{msg.content}</p>
                 {msg.action_results && msg.action_results.length > 0 && (
-                  <details className="mt-2 border-t border-gray-200 pt-1.5 group/outer">
-                    <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden text-xs text-green-700 font-medium flex items-center gap-1.5 py-0.5 hover:text-green-800">
-                      <svg className="w-2 h-2 shrink-0 transition-transform duration-150 group-open/outer:rotate-90" fill="currentColor" viewBox="0 0 6 10"><path d="M0 0l6 5-6 5V0z"/></svg>
+                  <div className="mt-2 border-t border-gray-200 pt-1.5">
+                    {/* Äußerer Toggle */}
+                    <button
+                      type="button"
+                      onClick={() => toggleOuter(i)}
+                      className="text-xs text-green-700 font-medium flex items-center gap-1.5 py-0.5 hover:text-green-800 w-full text-left"
+                    >
+                      <svg
+                        className={`w-2 h-2 shrink-0 transition-transform duration-150 ${expandedActions[i] ? 'rotate-90' : ''}`}
+                        fill="currentColor" viewBox="0 0 6 10"
+                      ><path d="M0 0l6 5-6 5V0z" /></svg>
                       ✅ {msg.action_results.length} Aktion{msg.action_results.length !== 1 ? 'en' : ''} ausgeführt
-                    </summary>
-                    <div className="mt-1 space-y-0.5 ml-1">
-                      {msg.action_results.map((result, idx) => (
-                        <details key={idx} className="group/inner text-xs">
-                          <summary className="cursor-pointer select-none list-none [&::-webkit-details-marker]:hidden flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5 pl-1">
-                            <svg className="w-1.5 h-1.5 shrink-0 transition-transform duration-150 group-open/inner:rotate-90" fill="currentColor" viewBox="0 0 6 10"><path d="M0 0l6 5-6 5V0z"/></svg>
-                            <span>{actionResultLabel(result)}</span>
-                          </summary>
-                          <div className="mt-1 ml-4 space-y-1.5">
-                            {result._prompt && (
-                              <div>
-                                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📤 Gesendeter Prompt</div>
-                                <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._prompt}</pre>
+                    </button>
+                    {/* Aktions-Liste */}
+                    {expandedActions[i] && (
+                      <div className="mt-1 space-y-0.5 ml-1">
+                        {msg.action_results.map((result, idx) => (
+                          <div key={idx} className="text-xs">
+                            {/* Innerer Toggle */}
+                            <button
+                              type="button"
+                              onClick={() => toggleInner(i, idx)}
+                              className="flex items-center gap-1.5 text-green-600 hover:text-green-700 py-0.5 pl-1 w-full text-left"
+                            >
+                              <svg
+                                className={`w-1.5 h-1.5 shrink-0 transition-transform duration-150 ${expandedActions[`${i}-${idx}`] ? 'rotate-90' : ''}`}
+                                fill="currentColor" viewBox="0 0 6 10"
+                              ><path d="M0 0l6 5-6 5V0z" /></svg>
+                              <span>{actionResultLabel(result)}</span>
+                            </button>
+                            {/* Detail-Inhalt */}
+                            {expandedActions[`${i}-${idx}`] && (
+                              <div className="mt-1 ml-4 space-y-1.5">
+                                {result._prompt && (
+                                  <div>
+                                    <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📤 Gesendeter Prompt</div>
+                                    <pre className="text-[10px] bg-blue-50 border border-blue-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._prompt}</pre>
+                                  </div>
+                                )}
+                                {result._raw && (
+                                  <div>
+                                    <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📥 KI-Antwort</div>
+                                    <pre className="text-[10px] bg-yellow-50 border border-yellow-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._raw}</pre>
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📋 Ergebnis</div>
+                                  <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
+                                    {JSON.stringify(Object.fromEntries(Object.entries(result).filter(([k]) => !k.startsWith('_'))), null, 2)}
+                                  </pre>
+                                </div>
                               </div>
                             )}
-                            {result._raw && (
-                              <div>
-                                <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📥 KI-Antwort</div>
-                                <pre className="text-[10px] bg-yellow-50 border border-yellow-100 rounded p-2 text-gray-600 whitespace-pre-wrap overflow-x-auto">{result._raw}</pre>
-                              </div>
-                            )}
-                            <div>
-                              <div className="text-[9px] font-semibold text-gray-400 uppercase tracking-wide mb-0.5">📋 Ergebnis</div>
-                              <pre className="text-[10px] bg-gray-50 border border-gray-100 rounded p-2 text-gray-500 whitespace-pre-wrap overflow-x-auto">
-                                {JSON.stringify(Object.fromEntries(Object.entries(result).filter(([k]) => !k.startsWith('_'))), null, 2)}
-                              </pre>
-                            </div>
                           </div>
-                        </details>
-                      ))}
-                    </div>
-                  </details>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
