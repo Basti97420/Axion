@@ -113,6 +113,12 @@ Wichtige Regeln:
 - Ohne Projektkontext → list_projects verwenden, dann Nutzer fragen
 - Immer zuerst reply schreiben, was du getan hast oder tun wirst
 - Bei mehreren zusammengehörigen Aktionen (z.B. Story + Unteraufgaben): alle nacheinander ausführen ohne Bestätigung
+
+Aktions-Feedback:
+- Nach jeder Aktion bekommst du eine [Systemrückmeldung] mit dem Ergebnis
+- issue_id, milestone_id etc. stehen explizit im Feedback — verwende sie direkt für Folgeaktionen
+- Beispiel: create_issue → Feedback enthält issue_id = 42 → add_comment mit issue_id: 42
+- Bei Fehler (❌) kannst du es korrigieren oder die nächste sinnvolle Aktion ausführen
 """
 
 
@@ -743,6 +749,45 @@ def _execute_trigger_agent_action(action_data, context):
     return {'type': 'agent_triggered', 'agent_id': target.id, 'run_id': run.id}
 
 
+def _build_result_feedback(result):
+    """Erstellt eine strukturierte, KI-lesbare Systemrückmeldung nach einer Aktion.
+    Hebt wichtige IDs explizit hervor, damit die KI sie für Folgeaktionen nutzen kann.
+    """
+    if not result:
+        return 'Aktion wurde ausgeführt (kein Ergebnis zurückgegeben).'
+    if isinstance(result, dict) and result.get('type') == 'error':
+        return f'❌ Fehler: {result.get("message", "Unbekannter Fehler")}'
+
+    lines = ['✅ Aktion erfolgreich ausgeführt.']
+    r = result
+    # Issue-Erstellung / Subtask / Kommentar
+    if r.get('issue_id'):
+        lines.append(f'   issue_id = {r["issue_id"]}   ← Diese ID für Folgeaktionen verwenden (add_comment, set_assignee, create_subtask, assign_milestone, …)')
+    if r.get('title'):
+        lines.append(f'   title = "{r["title"]}"')
+    # Meilenstein
+    if r.get('milestone_id'):
+        lines.append(f'   milestone_id = {r["milestone_id"]}   ← Für assign_milestone verwenden')
+    # Wiki
+    if r.get('slug'):
+        lines.append(f'   slug = "{r["slug"]}"')
+    # Tag
+    if r.get('tag_id'):
+        lines.append(f'   tag_id = {r["tag_id"]}')
+    # Allgemeiner Name (Meilenstein, Agent, Script, Tag)
+    if r.get('name') and not r.get('title'):
+        lines.append(f'   name = "{r["name"]}"')
+    # Script/Agent IDs
+    if r.get('script_id'):
+        lines.append(f'   script_id = {r["script_id"]}')
+    if r.get('agent_id'):
+        lines.append(f'   agent_id = {r["agent_id"]}')
+    # Falls nichts Spezifisches → rohe JSON-Ausgabe
+    if len(lines) == 1:
+        lines.append(f'   {json.dumps(r, ensure_ascii=False)}')
+    return '\n'.join(lines)
+
+
 @bp.get('/status')
 @login_required
 def status():
@@ -948,7 +993,12 @@ def chat():
             except Exception:
                 ai_resp2 = {'reply': fetched_context, 'action': None}
             reply = ai_resp2.get('reply') or raw2
-            action = None  # Keine weitere Aktion nach Read
+            # Folge-Aktion der KI übernehmen (z.B. create_issue nach search_issues)
+            raw = raw2
+            ai_resp = ai_resp2
+            action = ai_resp2.get('action')  # kann None sein → Loop wird nicht betreten
+        else:
+            action = None
 
     SCRIPT_ACTIONS = ('create_python_script', 'run_python_script')
     KI_AGENT_ACTIONS = ('create_ki_agent', 'run_ki_agent', 'save_memory')
@@ -978,7 +1028,12 @@ def chat():
         # Multi-Aktions-Loop: bis zu 10 Folgeaktionen ohne Nutzereingabe
         for _ in range(10):
             messages.append({'role': 'assistant', 'content': raw})
-            follow = f'Aktion abgeschlossen: {json.dumps(action_result, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. Wenn alles erledigt ist, antworte mit action: null.'
+            follow = (
+                f'[Systemrückmeldung]\n'
+                f'{_build_result_feedback(action_result)}\n\n'
+                f'Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. '
+                f'Wenn alles erledigt ist, antworte mit {{"reply": "Zusammenfassung", "action": null}}'
+            )
             messages.append({'role': 'user', 'content': follow})
             try:
                 raw = _get_ai_reply(messages)
@@ -1001,7 +1056,20 @@ def chat():
                         ai_resp = json.loads(raw)
                     except Exception:
                         break
-                action_result = {'type': 'read_done', 'action': next_action.get('type')}
+                read_result = {'type': 'read_done', 'action': next_action.get('type')}
+                all_results.append(_enrich(read_result, follow, raw))
+                reply = ai_resp.get('reply') or reply
+                # KI hat nach den Daten möglicherweise direkt eine Folge-Aktion formuliert
+                # → als action_result setzen und Loop-Top überspringen (direkt als nächste Iteration)
+                post_read_action = ai_resp.get('action')
+                if post_read_action and isinstance(post_read_action, dict) and post_read_action.get('type') not in (None, 'none'):
+                    post_result = _dispatch_action(post_read_action)
+                    if post_result:
+                        all_results.append(_enrich(post_result, raw, raw))
+                    action_result = post_result or read_result
+                else:
+                    action_result = read_result
+                continue
             else:
                 action_result = _dispatch_action(next_action)
             if action_result:
