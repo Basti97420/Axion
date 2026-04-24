@@ -95,6 +95,8 @@ export default function IssueDetail({ issue, projectId }) {
   const [newComment, setNewComment] = useState('')
   const [showManualEntry, setShowManualEntry] = useState(false)
   const [tab, setTab] = useState('activity')
+  const [eisenhowerSuggesting, setEisenhowerSuggesting] = useState(false)
+  const [eisenhowerSuggestion, setEisenhowerSuggestion] = useState(null) // {eisenhower, reason}
   const fileInputRef = useRef(null)
   const menuRef = useRef(null)
   const [editOpen, setEditOpen] = useState(false)
@@ -260,6 +262,25 @@ export default function IssueDetail({ issue, projectId }) {
     }
   }
 
+  async function handleEisenhowerSuggest() {
+    setEisenhowerSuggesting(true)
+    setEisenhowerSuggestion(null)
+    try {
+      const { data } = await issuesApi.suggestEisenhower(issue.id)
+      setEisenhowerSuggestion(data)
+    } catch (e) {
+      showToast(e?.response?.data?.error || 'KI-Fehler bei Eisenhower-Vorschlag', 'error')
+    } finally {
+      setEisenhowerSuggesting(false)
+    }
+  }
+
+  async function applyEisenhowerSuggestion() {
+    if (!eisenhowerSuggestion) return
+    await handleEisenhowerChange(eisenhowerSuggestion.eisenhower)
+    setEisenhowerSuggestion(null)
+  }
+
   async function handleDelete() {
     if (!await showConfirm(`Issue "${issue.title}" wirklich löschen?`)) return
     let deleteSubtasks = false
@@ -392,6 +413,42 @@ export default function IssueDetail({ issue, projectId }) {
               ))}
             </select>
             <span className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-xs opacity-50">▾</span>
+          </div>
+          <div className="relative">
+          <button
+            onClick={handleEisenhowerSuggest}
+            disabled={eisenhowerSuggesting}
+            title="KI schlägt Eisenhower-Quadrant vor"
+            className="text-sm px-2 py-1 rounded-full bg-gray-100 hover:bg-primary-100 text-gray-500 hover:text-primary-700 disabled:opacity-50 transition-colors"
+          >
+            {eisenhowerSuggesting ? '⏳' : '🤖'}
+          </button>
+          {eisenhowerSuggestion && (
+            <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-primary-200 rounded-xl shadow-lg p-3 w-72">
+              <p className="text-xs font-semibold text-gray-700 mb-1">
+                KI-Vorschlag: <span className={`font-bold px-1.5 py-0.5 rounded ${EISENHOWER_COLORS[eisenhowerSuggestion.eisenhower]}`}>
+                  {EISENHOWER_SHORT[eisenhowerSuggestion.eisenhower]} · {EISENHOWER_LABELS[eisenhowerSuggestion.eisenhower]}
+                </span>
+              </p>
+              {eisenhowerSuggestion.reason && (
+                <p className="text-xs text-gray-500 mb-2">{eisenhowerSuggestion.reason}</p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={applyEisenhowerSuggestion}
+                  className="flex-1 bg-primary-600 text-white text-xs py-1 rounded-lg hover:bg-primary-700 font-medium"
+                >
+                  Anwenden
+                </button>
+                <button
+                  onClick={() => setEisenhowerSuggestion(null)}
+                  className="px-3 text-xs text-gray-500 border border-gray-200 rounded-lg hover:bg-gray-50"
+                >
+                  Verwerfen
+                </button>
+              </div>
+            </div>
+          )}
           </div>
           {issue.tags?.map((tag) => (
             <span

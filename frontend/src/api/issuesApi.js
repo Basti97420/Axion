@@ -18,5 +18,6 @@ export const issuesApi = {
   getDependencies: (id)                 => client.get(`/issues/${id}/dependencies`),
   addDependency:   (id, data)           => client.post(`/issues/${id}/dependencies`, data),
   removeDependency:  (id, targetId, type) => client.delete(`/issues/${id}/dependencies/${targetId}`, { params: { type } }),
-  revertActivity:    (issueId, activityId) => client.post(`/issues/${issueId}/activity/${activityId}/revert`),
+  revertActivity:       (issueId, activityId) => client.post(`/issues/${issueId}/activity/${activityId}/revert`),
+  suggestEisenhower:    (id)                  => client.post(`/issues/${id}/suggest-eisenhower`),
 }

@@ -385,3 +385,45 @@ def remove_dependency(issue_id, target_id):
 
     db.session.commit()
     return jsonify({'ok': True})
+
+
+@bp.route('/<int:issue_id>/suggest-eisenhower', methods=['POST'])
+@login_required
+def suggest_eisenhower(issue_id):
+    """KI-Vorschlag für Eisenhower-Einordnung des Issues."""
+    issue = db.get_or_404(Issue, issue_id)
+
+    try:
+        from app.routes.ai import _get_ai_reply
+        from app.services.ki_agent_service import _parse_ai_json
+    except Exception as e:
+        return jsonify({'error': f'KI nicht verfügbar: {e}'}), 503
+
+    desc = (issue.description or '').strip()[:500]
+    prompt = (
+        f'Analysiere dieses Issue und ordne es in die Eisenhower-Matrix ein.\n'
+        f'Antworte NUR als valides JSON ohne weiteren Text:\n'
+        f'{{"eisenhower": "do_first|schedule|delegate|eliminate", "reason": "1 kurzer Satz Begruendung"}}\n\n'
+        f'Issue-Typ: {issue.type}, Priorität: {issue.priority}\n'
+        f'Titel: {issue.title}\n'
+        f'Beschreibung: {desc or "(keine)"}'
+    )
+    messages = [
+        {'role': 'system', 'content': 'Du bist ein Experte für Aufgabenpriorisierung. Antworte immer als valides JSON.'},
+        {'role': 'user', 'content': prompt},
+    ]
+    try:
+        raw = _get_ai_reply(messages)
+        parsed = _parse_ai_json(raw)
+        eisenhower = parsed.get('eisenhower') or ''
+        reason = parsed.get('reason') or parsed.get('reply') or ''
+        if eisenhower not in VALID_EISENHOWER:
+            for val in VALID_EISENHOWER:
+                if val in raw:
+                    eisenhower = val
+                    break
+        if not eisenhower:
+            return jsonify({'error': f'KI konnte keinen Quadranten bestimmen: {raw[:200]}'}), 422
+        return jsonify({'eisenhower': eisenhower, 'reason': reason})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 503

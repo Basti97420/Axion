@@ -255,6 +255,13 @@ export default function Navbar({ onToggleSidebar }) {
                   >
                     <span className="text-base">👥</span> Benutzerverwaltung
                   </Link>
+                  <Link
+                    to="/admin/workspace"
+                    onClick={() => setShowMenu(false)}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 transition-colors flex items-center gap-2"
+                  >
+                    <span className="text-base">🗄️</span> Admin-Workspace
+                  </Link>
                 </>
               )}
 

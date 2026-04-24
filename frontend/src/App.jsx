@@ -10,6 +10,7 @@ import CalendarPage from './pages/CalendarPage'
 import KiAgentsPage from './pages/KiAgentsPage'
 import PythonScriptsPage from './pages/PythonScriptsPage'
 import AdminUsersPage from './pages/AdminUsersPage'
+import AdminWorkspacePage from './pages/AdminWorkspacePage'
 import UserSettingsPage from './pages/UserSettingsPage'
 import Layout from './components/common/Layout'
 
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="knowledge" element={<WikiIndexPage />} />
         <Route path="knowledge/:slug" element={<WikiSlugPage />} />
         <Route path="admin/users" element={<AdminUsersPage />} />
+        <Route path="admin/workspace" element={<AdminWorkspacePage />} />
         <Route path="settings" element={<UserSettingsPage />} />
       </Route>
     </Routes>
