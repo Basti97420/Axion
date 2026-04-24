@@ -11,6 +11,8 @@ from typing import Optional
 
 import requests
 
+from app.constants import FETCH_ACTIONS
+
 logger = logging.getLogger(__name__)
 
 _thread: Optional[threading.Thread] = None
@@ -478,10 +480,6 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
         reply = ai_resp.get('reply') or raw
         action = ai_resp.get('action')
 
-        READ_ACTIONS = (
-            'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
-            'read_issue', 'read_script_output', 'read_agent_output', 'read_memory',
-        )
         SCRIPT_ACTIONS = ('create_python_script', 'run_python_script')
         KI_AGENT_ACTIONS_TG = ('create_ki_agent', 'run_ki_agent', 'save_memory')
 
@@ -494,7 +492,7 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
             return _execute_action(act, user_id, action_context)
 
         # Zweistufig für Lese-Aktionen
-        if action and isinstance(action, dict) and action.get('type') in READ_ACTIONS:
+        if action and isinstance(action, dict) and action.get('type') in FETCH_ACTIONS:
             fetched = _fetch_context_for_ai(action)
             if fetched:
                 messages.append({'role': 'assistant', 'content': raw})
@@ -521,7 +519,7 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
                     break
                 if next_action.get('type') in (None, 'none'):
                     break
-                if next_action.get('type') in READ_ACTIONS:
+                if next_action.get('type') in FETCH_ACTIONS:
                     fetched = _fetch_context_for_ai(next_action)
                     if fetched:
                         messages.append({'role': 'assistant', 'content': raw})

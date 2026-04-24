@@ -10,6 +10,7 @@ from app.models.issue import Issue
 from app.models.comment import Comment
 from app.models.activity import ActivityLog
 from app.routes.settings import load_ai_config
+from app.constants import FETCH_ACTIONS
 
 bp = Blueprint('ai', __name__, url_prefix='/api/ai')
 
@@ -975,11 +976,7 @@ def chat():
     action_result = None
 
     # Zweistufiger Ablauf für Lese-/Suchaktionen
-    READ_ACTIONS = (
-        'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
-        'read_issue', 'read_script_output', 'read_agent_output', 'read_memory',
-    )
-    if action and isinstance(action, dict) and action.get('type') in READ_ACTIONS:
+    if action and isinstance(action, dict) and action.get('type') in FETCH_ACTIONS:
         fetched_context = _fetch_context_for_ai(action)
         if fetched_context:
             messages.append({'role': 'assistant', 'content': raw})
@@ -1046,7 +1043,7 @@ def chat():
             if next_action.get('type') in (None, 'none'):
                 break
             # Read-Aktion auch im Loop: zweistufig abhandeln
-            if next_action.get('type') in READ_ACTIONS:
+            if next_action.get('type') in FETCH_ACTIONS:
                 fetched = _fetch_context_for_ai(next_action)
                 if fetched:
                     messages.append({'role': 'assistant', 'content': raw})

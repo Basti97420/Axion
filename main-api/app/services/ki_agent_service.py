@@ -6,6 +6,7 @@ import requests as http
 from datetime import datetime, timedelta
 
 from app import db
+from app.constants import READ_ACTIONS, WRITE_ACTIONS, ADMIN_ACTIONS, FETCH_ACTIONS
 
 
 def _parse_ai_json(raw):
@@ -196,26 +197,6 @@ def _is_verifiable_action(action_type):
         'assign_milestone', 'set_dependency',
         'create_python_script',
     )
-
-
-# Rollen-basierte Aktionsfilter
-READ_ACTIONS = {
-    'search_issues', 'read_wiki_page', 'search_wiki', 'list_wiki_pages',
-    'list_projects', 'search', 'read_issue',
-}
-WRITE_ACTIONS = {
-    'create_issue', 'update_issue', 'add_comment',
-    'set_assignee', 'set_due_date',
-    'create_wiki_page', 'update_wiki_page',
-    'create_milestone', 'update_milestone',
-    'add_tag', 'remove_tag', 'create_tag',
-    'create_subtask', 'assign_milestone', 'set_dependency',
-    'add_worklog',
-}
-ADMIN_ACTIONS = {
-    'create_python_script', 'run_python_script',
-    'create_ki_agent', 'trigger_agent', 'create_file', 'trigger_self',
-}
 
 
 def _is_action_allowed(agent, action_type):
@@ -584,10 +565,6 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
         output_parts.append(f'💭 {reply}')
 
         # Bis zu 15 Aktionen ausführen (Loop für Folgeantworten)
-        READ_ACTIONS_AGENT = (
-            'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects',
-            'list_wiki_pages', 'read_issue',
-        )
         for _ in range(15):
             if not action or not isinstance(action, dict):
                 break
@@ -596,7 +573,7 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                 break
 
             # Lese-Aktionen: zweistufig (Daten holen, dann KI erneut mit Daten)
-            if action_type in READ_ACTIONS_AGENT:
+            if action_type in FETCH_ACTIONS:
                 from app.routes.ai import _fetch_context_for_ai
                 fetched = _fetch_context_for_ai(action)
                 if fetched:
