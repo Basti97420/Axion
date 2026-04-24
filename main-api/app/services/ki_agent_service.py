@@ -681,6 +681,13 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                 output_parts.append(f'\n\n✅ **`{action_type}`{result_summary}**')
             _save_checkpoint(agent, workspace_dir, len(actions_log), action_type, result, verified, retries, output_parts)
 
+            # Progressiver Output-Update für Live-Polling
+            try:
+                run.output = '\n'.join(output_parts)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+
             # Folgeantwort holen
             messages.append({'role': 'assistant', 'content': raw})
             follow_result = json.dumps(result or {}, ensure_ascii=False)

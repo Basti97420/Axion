@@ -670,6 +670,8 @@ export default function KiAgentsPage() {
   const [creating, setCreating] = useState(false)
   const [runs, setRuns] = useState([])
   const [running, setRunning] = useState(false)
+  const [liveRunId, setLiveRunId] = useState(null)
+  const [liveOutput, setLiveOutput] = useState('')
   const [error, setError] = useState(null)
   const [filesKey, setFilesKey] = useState(0)
   const [activeTab, setActiveTab] = useState('config')
@@ -693,6 +695,40 @@ export default function KiAgentsPage() {
       setRuns([])
     }
   }, [selected])
+
+  // Live-Polling: solange ein Run läuft alle 2s den Status abrufen
+  useEffect(() => {
+    if (!liveRunId || !selected) return
+    let cancelled = false
+    const poll = async () => {
+      while (!cancelled) {
+        await new Promise((r) => setTimeout(r, 2000))
+        if (cancelled) break
+        try {
+          const { data: run } = await kiAgentsApi.getRun(selected.id, liveRunId)
+          if (cancelled) break
+          setLiveOutput(run.output || '')
+          if (run.finished_at) {
+            // Run abgeschlossen: Runs-Liste aktualisieren
+            const { data: allRuns } = await kiAgentsApi.getRuns(selected.id)
+            setRuns(allRuns)
+            const { data: agent } = await kiAgentsApi.get(selected.id)
+            setSelected(agent)
+            setAgents((a) => a.map((ag) => ag.id === agent.id ? agent : ag))
+            setFilesKey((k) => k + 1)
+            setRunning(false)
+            setLiveRunId(null)
+            setLiveOutput('')
+            break
+          }
+        } catch {
+          break
+        }
+      }
+    }
+    poll()
+    return () => { cancelled = true }
+  }, [liveRunId, selected?.id])
 
   async function handleSave(formData) {
     setError(null)
@@ -727,18 +763,12 @@ export default function KiAgentsPage() {
 
   async function handleRun() {
     setRunning(true)
+    setLiveOutput('')
     setError(null)
     try {
-      await kiAgentsApi.run(selected.id)
-      setTimeout(() => {
-        kiAgentsApi.getRuns(selected.id).then(({ data }) => setRuns(data)).catch(() => {})
-        kiAgentsApi.get(selected.id).then(({ data }) => {
-          setSelected(data)
-          setAgents((a) => a.map((ag) => ag.id === data.id ? data : ag))
-        }).catch(() => {})
-        setFilesKey((k) => k + 1)
-        setRunning(false)
-      }, 2000)
+      const { data } = await kiAgentsApi.run(selected.id)
+      setLiveRunId(data.run_id)
+      setActiveTab('log')
     } catch (e) {
       setError('Fehler beim Ausführen')
       setRunning(false)
@@ -967,13 +997,38 @@ Fasse alle offenen Issues zusammen und schreibe das Ergebnis als bericht.md."
                 <>
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold text-gray-700">🕐 Protokoll</h3>
-                    <button
-                      onClick={() => kiAgentsApi.getRuns(selected.id).then(({ data }) => setRuns(data))}
-                      className="text-xs text-primary-600 hover:underline"
-                    >
-                      Aktualisieren
-                    </button>
+                    {!running && (
+                      <button
+                        onClick={() => kiAgentsApi.getRuns(selected.id).then(({ data }) => setRuns(data))}
+                        className="text-xs text-primary-600 hover:underline"
+                      >
+                        Aktualisieren
+                      </button>
+                    )}
                   </div>
+
+                  {/* Live-Output während Agent läuft */}
+                  {running && (
+                    <div className="mb-4 border border-primary-200 rounded-xl overflow-hidden bg-primary-50">
+                      <div className="flex items-center gap-2 px-4 py-2.5 border-b border-primary-200 bg-primary-100">
+                        <span className="relative flex h-2.5 w-2.5">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75" />
+                          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-primary-500" />
+                        </span>
+                        <span className="text-xs font-semibold text-primary-700">Agent läuft…</span>
+                      </div>
+                      <div className="px-4 py-3 min-h-[60px]">
+                        {liveOutput ? (
+                          <div className="prose prose-sm max-w-none text-xs">
+                            <ReactMarkdown>{liveOutput}</ReactMarkdown>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-primary-400 italic">Warte auf erste Ausgabe…</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   <RunList runs={runs} />
                 </>
               )}

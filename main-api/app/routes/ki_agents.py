@@ -207,6 +207,14 @@ def get_runs(agent_id):
     return jsonify([r.to_dict() for r in runs])
 
 
+@bp.get('/api/ki-agents/<int:agent_id>/runs/<int:run_id>')
+@login_required
+def get_run(agent_id, run_id):
+    """Einzelnen Run abrufen – für Live-Polling während ein Agent läuft."""
+    run = KiAgentRun.query.filter_by(id=run_id, agent_id=agent_id).first_or_404()
+    return jsonify(run.to_dict())
+
+
 def _agent_workspace_dir(agent):
     from app.services.ki_agent_service import _get_workspace_dir
     return _get_workspace_dir(agent)

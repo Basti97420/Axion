@@ -8,6 +8,7 @@ export const kiAgentsApi = {
   remove:     (id) => client.delete(`/ki-agents/${id}`),
   run:        (id) => client.post(`/ki-agents/${id}/run`),
   getRuns:    (id) => client.get(`/ki-agents/${id}/runs`),
+  getRun:     (id, runId) => client.get(`/ki-agents/${id}/runs/${runId}`),
   getFiles:   (id) => client.get(`/ki-agents/${id}/files`),
   deleteFile: (id, filename) => client.delete(`/ki-agents/${id}/files/${encodeURIComponent(filename)}`),
   fileUrl:    (id, filename) => `/api/ki-agents/${id}/files/${encodeURIComponent(filename)}`,
