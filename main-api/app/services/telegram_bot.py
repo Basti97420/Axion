@@ -470,11 +470,10 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
             {'role': 'user', 'content': frage},
         ]
 
+        from app.services.ki_agent_service import _parse_ai_json as _parse_json
+
         raw = _get_ai_reply(messages)
-        try:
-            ai_resp = _json.loads(raw)
-        except Exception:
-            ai_resp = {'reply': raw, 'action': None}
+        ai_resp = _parse_json(raw)
 
         reply = ai_resp.get('reply') or raw
         action = ai_resp.get('action')
@@ -500,26 +499,23 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
             if fetched:
                 messages.append({'role': 'assistant', 'content': raw})
                 messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nBeantworte nun die Frage auf Basis dieser Informationen.'})
-                try:
-                    raw2 = _get_ai_reply(messages)
-                    ai_resp2 = _json.loads(raw2)
-                except Exception:
-                    ai_resp2 = {'reply': fetched, 'action': None}
+                raw2 = _get_ai_reply(messages)
+                ai_resp2 = _parse_json(raw2)
                 reply = ai_resp2.get('reply') or raw2
                 action = None
 
-        # Aktions-Loop (bis zu 4 Folgeaktionen)
+        # Aktions-Loop (bis zu 14 Folgeaktionen = 15 gesamt)
         if action and isinstance(action, dict) and action.get('type') not in (None, 'none'):
             dispatch(action)
-            for _ in range(4):
+            for _ in range(14):
                 messages.append({'role': 'assistant', 'content': raw})
                 follow = f'Aktion abgeschlossen: {_json.dumps(ai_resp.get("action") or {}, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen aus. Wenn alles erledigt ist, antworte mit action: null.'
                 messages.append({'role': 'user', 'content': follow})
                 try:
                     raw = _get_ai_reply(messages)
-                    ai_resp = _json.loads(raw)
                 except Exception:
                     break
+                ai_resp = _parse_json(raw)
                 next_action = ai_resp.get('action')
                 if not next_action or not isinstance(next_action, dict):
                     break
@@ -532,9 +528,9 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
                         messages.append({'role': 'user', 'content': f'[Abgerufene Daten]:\n{fetched}\n\nFahre fort.'})
                         try:
                             raw = _get_ai_reply(messages)
-                            ai_resp = _json.loads(raw)
                         except Exception:
                             break
+                        ai_resp = _parse_json(raw)
                 else:
                     dispatch(next_action)
                 reply = ai_resp.get('reply') or reply

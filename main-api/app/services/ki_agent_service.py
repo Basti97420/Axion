@@ -8,6 +8,68 @@ from datetime import datetime, timedelta
 from app import db
 
 
+def _parse_ai_json(raw):
+    """Parst die KI-Antwort robust zu einem Dict.
+    Unterstützt:
+    - Normales einzelnes JSON-Objekt
+    - Mehrere JSON-Objekte (JSONL) – nimmt das erste
+    - JSON in ```json ... ``` Codeblöcken
+    Gibt immer ein Dict zurück (Fallback: {'reply': raw, 'action': None}).
+    """
+    if not raw or not raw.strip():
+        return {'reply': '', 'action': None}
+
+    text = raw.strip()
+
+    # 1. Direkt parsen
+    try:
+        result = json.loads(text)
+        if isinstance(result, dict):
+            return result
+    except (json.JSONDecodeError, ValueError):
+        pass
+
+    # 2. ```json ... ``` Codeblock extrahieren
+    m = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', text, re.DOTALL)
+    if m:
+        try:
+            result = json.loads(m.group(1))
+            if isinstance(result, dict):
+                return result
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+    # 3. Zeilenweise: erstes valides JSON-Objekt nehmen (JSONL-Format)
+    for line in text.splitlines():
+        line = line.strip()
+        if line.startswith('{'):
+            try:
+                result = json.loads(line)
+                if isinstance(result, dict):
+                    return result
+            except (json.JSONDecodeError, ValueError):
+                pass
+
+    # 4. Erstes { ... } per Tiefenzähler extrahieren
+    start = text.find('{')
+    if start != -1:
+        depth = 0
+        for i, ch in enumerate(text[start:], start):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        result = json.loads(text[start:i + 1])
+                        if isinstance(result, dict):
+                            return result
+                    except (json.JSONDecodeError, ValueError):
+                        break
+
+    return {'reply': raw, 'action': None}
+
+
 def _fetch_website(url):
     """Holt Textinhalt einer Website (max 8000 Zeichen)."""
     try:
@@ -152,7 +214,7 @@ WRITE_ACTIONS = {
 }
 ADMIN_ACTIONS = {
     'create_python_script', 'run_python_script',
-    'create_ki_agent', 'trigger_agent', 'create_file',
+    'create_ki_agent', 'trigger_agent', 'create_file', 'trigger_self',
 }
 
 
@@ -196,6 +258,8 @@ def _execute_single_action(action_type, action_data, issue_id, agent, agent_id, 
             return _execute_file_action(action_data, exec_context), None
         elif action_type == 'trigger_agent':
             return _execute_trigger_agent_action(action_data, exec_context), None
+        elif action_type == 'trigger_self':
+            return {'trigger_self': True}, None
         else:
             return _execute_action({'type': action_type, 'data': action_data, 'issue_id': issue_id}, agent_id, exec_context), None
     except Exception as e:
@@ -389,6 +453,7 @@ Du kannst folgende Aktionen ausführen:
 - assign_milestone: Issue einem Meilenstein zuweisen
 - create_file: Datei im Workspace erstellen (.md, .txt, .csv)
 - trigger_agent: Anderen Agenten im Projekt starten
+- trigger_self: Eigenen neuen Run starten (nur wenn 15 Schritte nicht reichen — vorher memory.md aktualisieren!). ACHTUNG: trigger_self funktioniert NUR in manuellen oder scheduler-gestarteten Runs, NICHT in bereits durch chain gestarteten Runs (Endlosschutz).
 
 # Lese-Aktionen (du bekommst die Daten automatisch zurück):
 - search_issues: Issues projektübergreifend suchen
@@ -414,6 +479,7 @@ Oder mit Aktion:
 {"reply": "...", "action": {"type": "create_wiki_page", "data": {"title": "...", "content": "Markdown"}}}
 {"reply": "...", "action": {"type": "create_file", "data": {"filename": "bericht.md", "content": "# Inhalt"}}}
 {"reply": "...", "action": {"type": "trigger_agent", "data": {"agent_id": 2}}}
+{"reply": "Ich starte mich neu...", "action": {"type": "trigger_self", "data": {"reason": "Mehr als 15 Schritte nötig"}}}
 {"reply": "Ich suche...", "action": {"type": "search_issues", "data": {"query": "login", "status": "open"}}}
 {"reply": "Ich lese...", "action": {"type": "read_issue", "data": {"issue_id": 5}}}
 {"reply": "Ich lese...", "action": {"type": "read_wiki_page", "data": {"slug": "seitenname"}}}
@@ -429,6 +495,8 @@ Eisenhower-Matrix (eisenhower-Feld bei update_issue):
 - delegate:  Nicht wichtig + Dringend → delegieren (Q3)
 - eliminate: Nicht wichtig + Nicht dringend → eliminieren (Q4)
 - null: nicht gesetzt
+
+Du kannst bis zu 15 Aktionen pro Run ausführen. Wenn du mehr Schritte benötigst, aktualisiere zuerst memory.md und verwende dann trigger_self.
 
 WICHTIG – Gedächtnis:
 Am Ende jedes Runs aktualisierst du deine memory.md im Workspace mit:
@@ -508,22 +576,19 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
         total_tokens_in += t_in
         total_tokens_out += t_out
 
-        try:
-            ai_resp = json.loads(raw)
-        except (json.JSONDecodeError, ValueError):
-            ai_resp = {'reply': raw, 'action': None}
+        ai_resp = _parse_ai_json(raw)
 
         reply = ai_resp.get('reply') or raw
         action = ai_resp.get('action')
 
         output_parts.append(f'💭 {reply}')
 
-        # Bis zu 5 Aktionen ausführen (Loop für Folgeantworten)
+        # Bis zu 15 Aktionen ausführen (Loop für Folgeantworten)
         READ_ACTIONS_AGENT = (
             'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects',
             'list_wiki_pages', 'read_issue',
         )
-        for _ in range(5):
+        for _ in range(15):
             if not action or not isinstance(action, dict):
                 break
             action_type = action.get('type')
@@ -541,9 +606,9 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                         raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
                         total_tokens_in += t_in
                         total_tokens_out += t_out
-                        ai_resp = json.loads(raw)
                     except Exception:
                         break
+                    ai_resp = _parse_ai_json(raw)
                     reply = ai_resp.get('reply') or reply
                     output_parts.append(f'\n\n↻ **Daten abgerufen ({action_type})**')
                     if reply:
@@ -551,6 +616,31 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
                     actions_log.append({'type': action_type, 'thinking': reply, 'result': {'type': 'read_done'}, 'verified': True, 'retries': 0})
                     action = ai_resp.get('action')
                     continue
+
+            # trigger_self: Neuen eigenen Run starten
+            # Schutz gegen Endlosschleifen: nur erlaubt wenn dieser Run NICHT selbst per chain gestartet wurde
+            if action_type == 'trigger_self':
+                if triggered_by == 'chain':
+                    actions_log.append({'type': 'trigger_self', 'thinking': reply, 'result': None, 'verified': False, 'retries': 0, 'error': 'Endlosschutz: trigger_self ist in chain-Runs nicht erlaubt'})
+                    output_parts.append('\n\n⛔ **`trigger_self` abgebrochen** — bereits ein chain-Run, Endlosschutz aktiv.')
+                    break
+                agent.workspace = '\n'.join(output_parts)
+                db.session.commit()
+                from app.models.ki_agent import KiAgentRun as _SelfRun
+                import threading as _threading
+                new_run = _SelfRun(agent_id=agent.id, triggered_by='chain', started_at=datetime.utcnow())
+                db.session.add(new_run)
+                db.session.commit()
+                from flask import current_app as _cur_app
+                _threading.Thread(
+                    target=run_agent,
+                    args=(_cur_app._get_current_object(), agent.id, new_run.id, 'chain'),
+                    daemon=True,
+                ).start()
+                reason = (action.get('data') or {}).get('reason', '')
+                actions_log.append({'type': 'trigger_self', 'thinking': reply, 'result': {'new_run_id': new_run.id}, 'verified': True, 'retries': 0})
+                output_parts.append(f'\n\n🔄 **Neuen eigenen Run gestartet (Run #{new_run.id})**{(" — " + reason) if reason else ""}')
+                break
 
             # Rolle prüfen
             if not _is_action_allowed(agent, action_type):
@@ -616,15 +706,28 @@ def _run_agent_inner(agent_id, run_id, triggered_by):
 
             # Folgeantwort holen
             messages.append({'role': 'assistant', 'content': raw})
-            follow = f'Aktion abgeschlossen: {json.dumps(result or {}, ensure_ascii=False)}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. Wenn alles erledigt ist, antworte mit action: null.'
+            follow_result = json.dumps(result or {}, ensure_ascii=False)
+            # Bei create_file: Dateiinhalt sofort zurückgeben damit der Agent damit weiterarbeiten kann
+            if action_type == 'create_file' and not err and verified:
+                filename = (action.get('data') or {}).get('filename', '')
+                if filename:
+                    try:
+                        fpath = os.path.join(workspace_dir, filename)
+                        if os.path.exists(fpath):
+                            with open(fpath, 'r', encoding='utf-8') as _f:
+                                file_content = _f.read(3000)
+                            follow_result = f'Datei "{filename}" wurde erstellt. Inhalt:\n{file_content}'
+                    except Exception:
+                        pass
+            follow = f'Aktion abgeschlossen: {follow_result}. Führe alle weiteren nötigen Aktionen für den ursprünglichen Auftrag aus. Wenn alles erledigt ist, antworte mit action: null.'
             messages.append({'role': 'user', 'content': follow})
             try:
                 raw, t_in, t_out = _get_agent_ai_reply(messages, agent, return_usage=True)
                 total_tokens_in += t_in
                 total_tokens_out += t_out
-                ai_resp = json.loads(raw)
             except Exception:
                 break
+            ai_resp = _parse_ai_json(raw)
             reply = ai_resp.get('reply') or ''
             if reply:
                 output_parts.append(f'\n\n💭 {reply}')

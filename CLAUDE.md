@@ -216,10 +216,10 @@ Unterstützte Keys:
   - `load_ai_config()` in `app/routes/settings.py` – von `ai.py` importiert
 - **Kontext**: `useParams()` in `AiChatPanel` erkennt aktuellen `projectId`/`issueId`/`wikiSlug` und schickt ihn mit; enthält auch Python Scripts und KI-Agenten des Projekts
 - **Aktionen (Chat)**: `update_issue`, `add_comment`, `create_issue`, `create_wiki_page`, `update_wiki_page`, `add_worklog`, `create_milestone`, `update_milestone`, `set_assignee`, `set_due_date`, `add_tag`, `remove_tag`, `create_tag`, `create_subtask`, `assign_milestone`, `set_dependency`, `search_issues`, `read_wiki_page`, `search_wiki`, `list_wiki_pages`, `list_projects`, `create_python_script`, `run_python_script`, `create_ki_agent`, `run_ki_agent`
-- **Aktionen (Agenten)**: Alle Chat-Aktionen + `create_file` (Workspace-Datei), `trigger_agent` (Agenten-Kette)
+- **Aktionen (Agenten)**: Alle Chat-Aktionen + `create_file` (Workspace-Datei), `trigger_agent` (Agenten-Kette), `trigger_self` (eigenen neuen Run starten)
 - **JSON-Format**: KI-Antworten sind strukturiertes JSON `{reply, action?: {type, ...}}` – Fallback wenn kein JSON
 - **Zweistufige Read-Aktionen**: `read_wiki_page`, `search_wiki`, `search_issues`, `list_projects`, `list_wiki_pages` → erst Daten holen, dann KI erneut aufrufen mit Daten als Kontext
-- **Multi-Aktions-Loop**: KI kann bis zu 4 Folgeaktionen ohne Nutzereingabe ausführen (z.B. Story + Subtasks)
+- **Multi-Aktions-Loop**: KI kann bis zu 14 Folgeaktionen ohne Nutzereingabe ausführen (Telegram: 14, Agenten: 15 pro Run)
 - **Chat-History**: Letzte 10 Nachrichten werden mitgeschickt
 - **Status-Badge**: Grüner/roter Punkt in Panel-Header zeigt ob Provider erreichbar ist
 
@@ -279,10 +279,10 @@ Interne Endpunkte (Token: `X-Script-Token`):
 
 - **Modell** (`KiAgent`): `name`, `prompt`, `api_provider` (global/ollama/claude), `api_url`, `api_model`, `api_key`, `schedule_type`, `interval_min`, `schedule_days` (JSON-Array [0..6] Mo=0 So=6, null=täglich), `website_url`, `is_active`, `dry_run`, `notify_telegram`, `retry_on_error`, `retry_max`, `retry_delay_min`, `workspace` (letzter Output-Text), `last_run_at`, `next_run_at`
 - **Modell** (`KiAgentRun`): `output`, `actions_log` (JSON-Liste), `error`, `triggered_by` (manual/scheduler/chain/ki/retry)
-- **Aktionsschleife**: Agent führt bis zu 5 Aktionen pro Run aus, prüft Issue-Änderungen nach jeder Aktion
+- **Aktionsschleife**: Agent führt bis zu 15 Aktionen pro Run aus; nach `create_file` wird der neue Dateiinhalt sofort als Kontext zurückgegeben
 - **Workspace**: `instance/ki-agents/<agent_id>/` – Agent kann `.md`/`.txt`/`.csv` Dateien schreiben
 - **Website-Zugriff**: `website_url` → Content wird beim Run abgerufen und als Kontext mitgegeben
-- **Agenten-Kette**: `trigger_agent` → anderer Agent startet asynchron (kein Selbst-Triggering)
+- **Agenten-Kette**: `trigger_agent` → anderer Agent startet asynchron; `trigger_self` → Agent startet neuen eigenen Run (memory.md wird als Übergabe genutzt)
 - **Scheduler**: `ki_agent_scheduler.py` – Daemon-Thread, alle 30s, analog zu `python_script_scheduler.py` (inkl. `schedule_days`-Check)
 
 ## Telegram Bot
@@ -301,6 +301,94 @@ Interne Endpunkte (Token: `X-Script-Token`):
 - `closed_at` (DateTime, nullable): wird bei Status-Wechsel auf `done`/`cancelled` gesetzt; wird gecleart wenn wieder geöffnet
 - `assignee_id`: bei Issue-Erstellung automatisch auf `current_user.id` gesetzt, wenn kein Wert übergeben wird
 - Kanban blendet `done`/`cancelled`-Issues automatisch aus, wenn `closed_at` älter als 2 Tage ist
+
+## Lokales Testen im Docker-Container
+
+Für schnelle Tests ohne vollständigen Image-Build: geänderte Python-Dateien direkt in den laufenden Container kopieren und Gunicorn neu starten.
+
+### Vorgehen
+
+```bash
+# 1. Geänderte Service-Dateien in den Container kopieren
+docker cp main-api/app/services/ki_agent_service.py axionv2:/app/main-api/app/services/
+docker cp main-api/app/services/telegram_bot.py     axionv2:/app/main-api/app/services/
+# (weitere Dateien nach Bedarf)
+
+# 2. Gunicorn neu starten (ohne Container-Neustart)
+docker exec axionv2 supervisorctl restart main-api
+
+# 3. Bereit warten (~3s) und API prüfen
+sleep 3 && curl -s http://localhost:65443/api/ai/status
+```
+
+### Login & API-Zugriff
+
+```bash
+# Einloggen + Cookie speichern
+curl -s -c /tmp/axion-cookies.txt -X POST http://localhost:65443/api/auth/login \
+  -H "Content-Type: application/json" -d '{"name":"admin","password":"admin"}'
+
+# Alle weiteren Calls mit Cookie
+curl -s -b /tmp/axion-cookies.txt http://localhost:65443/api/projects
+```
+
+### KI-Agenten testen (Loop + trigger_self)
+
+```bash
+# 1. Testprojekt anlegen
+curl -s -b /tmp/axion-cookies.txt -X POST http://localhost:65443/api/projects \
+  -H "Content-Type: application/json" \
+  -d '{"name":"KI-Test","key":"KIT","description":"KI-Agent Test"}'
+
+# 2. Admin-Agenten anlegen (project_id aus Schritt 1)
+curl -s -b /tmp/axion-cookies.txt -X POST http://localhost:65443/api/projects/<id>/ki-agents \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Loop-Test","role":"admin","schedule_type":"manual","is_active":true,"api_provider":"global"}'
+
+# 3. Prompt als agenten.md setzen (agent_id aus Schritt 2)
+curl -s -b /tmp/axion-cookies.txt -X PUT http://localhost:65443/api/ki-agents/<id>/prompt \
+  -H "Content-Type: application/json" \
+  -d '{"content":"Erstelle 7 Issues mit Titeln Test-1 bis Test-7. Danach schreibe summary.md mit Zusammenfassung."}'
+
+# 4. Run starten
+curl -s -b /tmp/axion-cookies.txt -X POST http://localhost:65443/api/ki-agents/<id>/run \
+  -H "Content-Type: application/json" -d '{}'
+
+# 5. Auf Abschluss warten und Ergebnis prüfen
+until curl -s -b /tmp/axion-cookies.txt http://localhost:65443/api/ki-agents/<id>/runs \
+  | python3 -c "import sys,json; r=json.load(sys.stdin)[0]; print('done' if r.get('finished_at') else 'running')" \
+  | grep -q done; do sleep 5; done
+
+curl -s -b /tmp/axion-cookies.txt http://localhost:65443/api/ki-agents/<id>/runs | python3 -c "
+import sys,json
+r=json.load(sys.stdin)[0]
+acts=json.loads(r.get('actions') or '[]')
+print(f'Aktionen: {len(acts)}, Fehler: {r.get(\"error\") or \"keiner\"}')"
+```
+
+### Fehlendes DB-Schema nachrüsten (SQLite, kein transaktionales DDL)
+
+Wenn ein neues Feld in einem Model fehlt:
+```bash
+docker exec axionv2 python -c "
+from app import create_app, db; from sqlalchemy import text
+app = create_app()
+with app.app_context():
+    with db.engine.connect() as c:
+        c.execute(text('ALTER TABLE <tabelle> ADD COLUMN <feld> <typ>'))
+        c.commit()
+print('Spalte hinzugefügt')
+" --directory /app/main-api
+```
+
+### Wichtige Logs
+
+```bash
+docker logs axionv2 --tail 40          # Gunicorn stdout/stderr
+docker exec axionv2 tail -f /var/log/nginx/error.log
+```
+
+---
 
 ## Release-Prozess
 
