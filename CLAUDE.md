@@ -215,10 +215,10 @@ Unterstützte Keys:
 - **Konfiguration**: `main-api/instance/settings.env` – wird bei jeder Anfrage geladen (kein Neustart nötig)
   - `load_ai_config()` in `app/routes/settings.py` – von `ai.py` importiert
 - **Kontext**: `useParams()` in `AiChatPanel` erkennt aktuellen `projectId`/`issueId`/`wikiSlug` und schickt ihn mit; enthält auch Python Scripts und KI-Agenten des Projekts
-- **Aktionen (Chat)**: `update_issue`, `add_comment`, `create_issue`, `create_wiki_page`, `update_wiki_page`, `add_worklog`, `create_milestone`, `update_milestone`, `set_assignee`, `set_due_date`, `add_tag`, `remove_tag`, `create_tag`, `create_subtask`, `assign_milestone`, `set_dependency`, `search_issues`, `read_wiki_page`, `search_wiki`, `list_wiki_pages`, `list_projects`, `create_python_script`, `run_python_script`, `create_ki_agent`, `run_ki_agent`
+- **Aktionen (Chat)**: `update_issue`, `add_comment`, `create_issue`, `create_wiki_page`, `update_wiki_page`, `add_worklog`, `create_milestone`, `update_milestone`, `set_assignee`, `set_due_date`, `add_tag`, `remove_tag`, `create_tag`, `create_subtask`, `assign_milestone`, `set_dependency`, `search_issues`, `read_wiki_page`, `search_wiki`, `list_wiki_pages`, `list_projects`, `create_python_script`, `run_python_script`, `create_ki_agent`, `run_ki_agent`, `read_issue`, `read_script_output`, `read_agent_output`, `read_memory`, `save_memory`, `create_calendar_entry`, `list_calendar_entries`
 - **Aktionen (Agenten)**: Alle Chat-Aktionen + `create_file` (Workspace-Datei), `trigger_agent` (Agenten-Kette), `trigger_self` (eigenen neuen Run starten)
 - **JSON-Format**: KI-Antworten sind strukturiertes JSON `{reply, action?: {type, ...}}` – Fallback wenn kein JSON
-- **Zweistufige Read-Aktionen**: `read_wiki_page`, `search_wiki`, `search_issues`, `list_projects`, `list_wiki_pages` → erst Daten holen, dann KI erneut aufrufen mit Daten als Kontext
+- **Zweistufige Read-Aktionen**: `read_wiki_page`, `search_wiki`, `search_issues`, `list_projects`, `list_wiki_pages`, `list_calendar_entries` → erst Daten holen, dann KI erneut aufrufen mit Daten als Kontext
 - **Multi-Aktions-Loop**: KI kann bis zu 14 Folgeaktionen ohne Nutzereingabe ausführen (Telegram: 14, Agenten: 15 pro Run)
 - **Chat-History**: Letzte 10 Nachrichten werden mitgeschickt
 - **Status-Badge**: Grüner/roter Punkt in Panel-Header zeigt ob Provider erreichbar ist
@@ -265,6 +265,10 @@ axion.read_my_file(filename)               # → str
 axion.list_agent_workspaces()              # → [{'name': ..., 'files': [...]}]
 axion.read_workspace_file(workspace_name, filename)  # → str
 
+# Kalender-Einträge
+axion.create_calendar_entry(title, start_dt, end_dt, issue_id=None)  # start/end_dt als ISO-String
+axion.list_calendar_entries(start=None, end=None)  # → Liste von Kalendereintrags-Dicts
+
 # Telegram (Nachricht in Queue einreihen → gesammelt nach Intervall gesendet)
 axion.notify_telegram(message)             # → {'ok': True}
 ```
@@ -272,6 +276,8 @@ axion.notify_telegram(message)             # → {'ok': True}
 Alle Funktionen werfen `requests.HTTPError` bei Fehler.
 Interne Endpunkte (Token: `X-Script-Token`):
 - `POST /api/internal/script/notify` – Telegram-Nachricht in Queue einreihen
+- `GET  /api/internal/script/calendar-entries` – Kalendereinträge auflisten
+- `POST /api/internal/script/calendar-entries` – Kalendereintrag anlegen
 - `GET /api/internal/script/projects` – alle Projekte
 - `GET /api/internal/script/projects/<id>` – einzelnes Projekt
 

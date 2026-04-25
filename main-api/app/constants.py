@@ -14,6 +14,7 @@ WRITE_ACTIONS = frozenset({
     'add_tag', 'remove_tag', 'create_tag',
     'create_subtask', 'assign_milestone', 'set_dependency',
     'add_worklog',
+    'create_calendar_entry',
 })
 ADMIN_ACTIONS = frozenset({
     'create_python_script', 'run_python_script',
@@ -25,4 +26,5 @@ ADMIN_ACTIONS = frozenset({
 FETCH_ACTIONS = frozenset({
     'read_wiki_page', 'search_wiki', 'search_issues', 'list_projects', 'list_wiki_pages',
     'read_issue', 'read_script_output', 'read_agent_output', 'read_memory',
+    'list_calendar_entries',
 })

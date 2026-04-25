@@ -164,6 +164,52 @@ def read_script_file(workspace_name, filename):
         return f.read()
 
 
+def create_calendar_entry(title, start_dt, end_dt, issue_id=None):
+    """Erstellt einen Kalendereintrag im Projekt.
+
+    Args:
+        title:    Titel des Termins (str)
+        start_dt: Startzeit als ISO-String, z.B. '2026-05-01T10:00:00'
+        end_dt:   Endzeit als ISO-String, z.B. '2026-05-01T11:00:00'
+        issue_id: Optionale Issue-ID für verknüpfte Termine (int oder None)
+
+    Returns:
+        dict mit id, title, start_dt, end_dt des angelegten Eintrags
+    """
+    r = _requests.post(
+        f"{{_base}}/api/internal/script/calendar-entries",
+        json={{"title": title, "start_dt": start_dt, "end_dt": end_dt,
+               "issue_id": issue_id, "project_id": _proj}},
+        headers=_headers,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
+def list_calendar_entries(start=None, end=None):
+    """Gibt Kalendereinträge des Projekts zurück.
+
+    Args:
+        start: Optionaler Startfilter als ISO-String '2026-05-01' oder '2026-05-01T00:00:00'
+        end:   Optionaler Endfilter als ISO-String
+
+    Returns:
+        Liste von Kalendereintrags-Dicts (id, title, start_dt, end_dt, issue_id, ...)
+    """
+    params = {{"project_id": _proj}}
+    if start:
+        params["start"] = start
+    if end:
+        params["end"] = end
+    r = _requests.get(
+        f"{{_base}}/api/internal/script/calendar-entries",
+        params=params,
+        headers=_headers,
+    )
+    r.raise_for_status()
+    return r.json()
+
+
 def notify_telegram(message):
     """Sendet eine Telegram-Benachrichtigung.
 

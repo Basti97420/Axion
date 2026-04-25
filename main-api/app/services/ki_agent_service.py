@@ -378,6 +378,16 @@ def _verify_action(action, result):
             return {'ok': True, 'detail': f'Script #{script.id} "{script.name}" existiert.'}
         return {'ok': False, 'detail': f'Script "{name}" nicht gefunden.'}
 
+    # create_calendar_entry → Eintrag muss in DB existieren
+    if action_type == 'create_calendar_entry':
+        from app.models.calendar_entry import CalendarEntry
+        entry_id = result.get('id') if isinstance(result, dict) else None
+        if entry_id:
+            entry = CalendarEntry.query.get(entry_id)
+            if entry:
+                return {'ok': True, 'detail': f'Kalendereintrag #{entry.id} existiert.'}
+        return {'ok': False, 'detail': 'Kalendereintrag nicht in DB gefunden.'}
+
     return None
 
 

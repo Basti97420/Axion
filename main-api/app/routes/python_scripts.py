@@ -379,3 +379,56 @@ def internal_get_project(project_id):
     from app.models.project import Project
     p = db.get_or_404(Project, project_id)
     return jsonify({'id': p.id, 'name': p.name, 'key': p.key, 'description': p.description})
+
+
+@internal_bp.get('/api/internal/script/calendar-entries')
+def internal_list_calendar_entries():
+    if not _check_internal_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    from app.models.calendar_entry import CalendarEntry
+    from datetime import datetime as _dt
+    project_id = request.args.get('project_id', type=int)
+    q = CalendarEntry.query
+    if project_id:
+        q = q.filter_by(project_id=project_id)
+    if request.args.get('start'):
+        try:
+            q = q.filter(CalendarEntry.start_dt >= _dt.fromisoformat(request.args['start']))
+        except ValueError:
+            pass
+    if request.args.get('end'):
+        try:
+            q = q.filter(CalendarEntry.end_dt <= _dt.fromisoformat(request.args['end']))
+        except ValueError:
+            pass
+    entries = q.order_by(CalendarEntry.start_dt).limit(100).all()
+    return jsonify([e.to_dict() for e in entries])
+
+
+@internal_bp.post('/api/internal/script/calendar-entries')
+def internal_create_calendar_entry():
+    if not _check_internal_token():
+        return jsonify({'error': 'Unauthorized'}), 401
+    from app.models.calendar_entry import CalendarEntry
+    from datetime import datetime as _dt
+    data = request.get_json() or {}
+    start_raw = data.get('start_dt') or ''
+    end_raw = data.get('end_dt') or ''
+    if not start_raw or not end_raw:
+        return jsonify({'error': 'start_dt und end_dt sind Pflichtfelder'}), 400
+    try:
+        start_dt = _dt.fromisoformat(start_raw)
+        end_dt = _dt.fromisoformat(end_raw)
+    except ValueError as e:
+        return jsonify({'error': f'Ungültiges Datumsformat: {e}'}), 400
+    project_id = data.get('project_id')
+    entry = CalendarEntry(
+        title=(data.get('title') or '').strip() or None,
+        start_dt=start_dt,
+        end_dt=end_dt,
+        issue_id=data.get('issue_id'),
+        project_id=int(project_id) if project_id else None,
+    )
+    db.session.add(entry)
+    db.session.commit()
+    return jsonify(entry.to_dict()), 201

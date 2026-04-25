@@ -85,11 +85,16 @@ Wenn du eine Aktion ausführst:
 {{"reply": "Ich prüfe den Script-Output...", "action": {{"type": "read_script_output", "data": {{"script_id": 3}}}}}}
 {{"reply": "Ich prüfe den Agenten-Output...", "action": {{"type": "read_agent_output", "data": {{"agent_id": 2}}}}}}
 
+- create_calendar_entry: Einen Termin/Kalender-Eintrag erstellen (title, start_dt, end_dt im ISO-Format)
+- list_calendar_entries: Kalendereinträge des Projekts auflisten (optional: start, end als ISO-Datum)
 - save_memory: Inhalt dauerhaft in einer Datei im Chat-Workspace speichern
 - read_memory: Eine Memory-Datei lesen — du bekommst dann den Inhalt (wie read_wiki_page)
 
 {{"reply": "Ich merke mir...", "action": {{"type": "save_memory", "data": {{"filename": "todo.md", "content": "# Offene Punkte\n- ..."}}}}}},
+{{"reply": "Ich merke mir...", "action": {{"type": "save_memory", "data": {{"filename": "todo.md", "content": "# Offene Punkte\n- ..."}}}}}},
 {{"reply": "Ich lese...", "action": {{"type": "read_memory", "data": {{"filename": "todo.md"}}}}}}
+{{"reply": "...", "action": {{"type": "create_calendar_entry", "data": {{"title": "Meeting", "start_dt": "2026-05-01T10:00:00", "end_dt": "2026-05-01T11:00:00"}}}}}}
+{{"reply": "Ich liste Termine...", "action": {{"type": "list_calendar_entries", "data": {{"start": "2026-05-01", "end": "2026-05-31"}}}}}}
 
 Verfügbare Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Verfügbare Prioritäten: low, medium, high, critical
@@ -284,6 +289,32 @@ def _fetch_context_for_ai(action):
             return f'# Inhalt von {filename}\n\n{content}'
         except Exception as e:
             return f'Fehler beim Lesen von "{filename}": {e}'
+
+    if action_type == 'list_calendar_entries':
+        from app.models.calendar_entry import CalendarEntry
+        from datetime import datetime as _dt
+        project_id = data.get('project_id')
+        q = CalendarEntry.query
+        if project_id:
+            q = q.filter_by(project_id=int(project_id))
+        if data.get('start'):
+            try:
+                q = q.filter(CalendarEntry.start_dt >= _dt.fromisoformat(data['start']))
+            except ValueError:
+                pass
+        if data.get('end'):
+            try:
+                q = q.filter(CalendarEntry.end_dt <= _dt.fromisoformat(data['end']))
+            except ValueError:
+                pass
+        entries = q.order_by(CalendarEntry.start_dt).limit(50).all()
+        if not entries:
+            return 'Keine Kalendereinträge gefunden.'
+        lines = [f'Kalendereinträge ({len(entries)}):']
+        for e in entries:
+            title = e.title or (e.issue.title if e.issue else '(kein Titel)')
+            lines.append(f'  #{e.id} | {e.start_dt.strftime("%d.%m.%Y %H:%M")} – {e.end_dt.strftime("%H:%M")} | {title}')
+        return '\n'.join(lines)
 
     return None
 
@@ -592,6 +623,55 @@ def _execute_action(action, user_id, context=None):
         ))
         db.session.commit()
         return {'type': 'comment_added', 'issue_id': issue.id}
+
+    # --- Kalender-Aktionen ---
+    if action_type == 'create_calendar_entry':
+        from app.models.calendar_entry import CalendarEntry
+        from datetime import datetime as _dt
+        d = action_data
+        title = (d.get('title') or '').strip()
+        start_raw = d.get('start_dt') or ''
+        end_raw = d.get('end_dt') or ''
+        if not start_raw or not end_raw:
+            return {'type': 'error', 'message': 'start_dt und end_dt sind Pflichtfelder (ISO-Format)'}
+        try:
+            start_dt = _dt.fromisoformat(start_raw)
+            end_dt = _dt.fromisoformat(end_raw)
+        except ValueError:
+            return {'type': 'error', 'message': f'Ungültiges Datumsformat: {start_raw} / {end_raw}'}
+        project_id = d.get('project_id') or context.get('project_id')
+        entry = CalendarEntry(
+            title=title or None,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            issue_id=d.get('issue_id'),
+            project_id=int(project_id) if project_id else None,
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return {'type': 'calendar_entry_created', 'id': entry.id, 'title': entry.title,
+                'start_dt': start_raw, 'end_dt': end_raw}
+
+    if action_type == 'list_calendar_entries':
+        from app.models.calendar_entry import CalendarEntry
+        from datetime import datetime as _dt
+        d = action_data
+        project_id = d.get('project_id') or context.get('project_id')
+        q = CalendarEntry.query
+        if project_id:
+            q = q.filter_by(project_id=int(project_id))
+        if d.get('start'):
+            try:
+                q = q.filter(CalendarEntry.start_dt >= _dt.fromisoformat(d['start']))
+            except ValueError:
+                pass
+        if d.get('end'):
+            try:
+                q = q.filter(CalendarEntry.end_dt <= _dt.fromisoformat(d['end']))
+            except ValueError:
+                pass
+        entries = q.order_by(CalendarEntry.start_dt).limit(50).all()
+        return [e.to_dict() for e in entries]
 
     return None
 
