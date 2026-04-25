@@ -66,52 +66,226 @@ Danach über Benutzerverwaltung (`/admin/users`) ändern.
 - **Activity Logging**: `activity_logger.log(action, user_id, issue_id, ...)` nach Änderungen
 - Fehlerantworten: `jsonify({"error": "Meldung"}), HTTP-Code`
 
-## API-Muster
+## API-Referenz
 
+### Auth (`app/routes/auth.py`)
 ```
-GET    /api/projects              → Liste
-POST   /api/projects              → Anlegen
+POST  /api/auth/login           → Einloggen (body: {name, password}) → {user}
+POST  /api/auth/logout          → Ausloggen
+GET   /api/auth/me              → Aktueller User → {user: {id, name, is_admin, ...}}
+PATCH /api/auth/password        → Passwort ändern (body: {current_password, new_password})
+```
+
+### Projekte (`app/routes/projects.py`)
+```
+GET    /api/projects              → Alle Projekte auflisten
+POST   /api/projects              → Anlegen (body: {name, key, description?, color?})
 GET    /api/projects/<id>         → Detail
-PUT    /api/projects/<id>         → Aktualisieren
-DELETE /api/projects/<id>         → Löschen
+PUT    /api/projects/<id>         → Aktualisieren (body: {name?, description?, color?})
+DELETE /api/projects/<id>         → Löschen (kaskadiert alle Issues, Scripts, Agenten etc.)
+GET    /api/projects/<id>/issues  → Issues des Projekts (query: ?status=&type=&assignee_id=)
+GET    /api/projects/<id>/log     → Aktivitäts-Log des Projekts
+GET    /api/projects/<id>/statuses           → Kanban-Statuses auflisten
+PUT    /api/projects/<id>/statuses/<sid>     → Status-Label/Farbe anpassen (body: {label, color, dot_color})
+GET    /api/projects/<id>/worklogs           → Worklogs des Projekts (query: ?weeks=4)
+```
 
-PATCH  /api/issues/<id>/status    → Status-Wechsel (Kanban); setzt closed_at bei done/cancelled
-PATCH  /api/issues/<id>/due_date  → Fälligkeitsdatum (Kalender-Drop)
+### Issues (`app/routes/issues.py`)
+```
+GET    /api/issues                → Alle Issues (query: ?project_id=&status=&type=&assignee_id=)
+POST   /api/issues                → Anlegen (body: {title, project_id, description?, type?, priority?, parent_id?, assignee_id?})
+GET    /api/issues/<id>           → Detail inkl. Tags, Milestones, Subtasks
+PUT    /api/issues/<id>           → Vollständig aktualisieren
+DELETE /api/issues/<id>           → Löschen
 
-POST   /api/issues/<id>/activity/<aid>/revert  → Feld-Änderung rückgängig (nur Admin)
+PATCH  /api/issues/<id>/status    → Status-Wechsel (body: {status}); setzt/löscht closed_at
+PATCH  /api/issues/<id>/priority  → Priorität ändern (body: {priority: low|medium|high|critical})
+PATCH  /api/issues/<id>/due_date  → Fälligkeitsdatum (body: {due_date: ISO-String oder null})
+PATCH  /api/issues/<id>/eisenhower→ Eisenhower-Quadrant (body: {eisenhower: do_first|schedule|delegate|eliminate|null})
+POST   /api/issues/<id>/suggest-eisenhower → KI schlägt Eisenhower-Einstufung vor → {eisenhower, reason}
 
-POST   /api/issues/<id>/attachments        → Datei hochladen
-GET    /api/issues/<id>/attachments        → Anhänge auflisten
-GET    /api/attachments/<id>/download      → Datei herunterladen (Content-Disposition: attachment)
-GET    /api/attachments/<id>/preview       → Datei inline anzeigen (Content-Disposition: inline, für Bilder/PDFs)
-DELETE /api/attachments/<id>               → Anhang löschen (nur Uploader oder Admin)
+GET    /api/issues/<id>/subtasks  → Unteraufgaben auflisten
+# Subtask erstellen: POST /api/issues mit parent_id im Body
 
-GET    /api/search?q=<query>      → Volltextsuche über Issues + Kommentare (min. 2 Zeichen)
+GET    /api/issues/<id>/dependencies   → Abhängigkeiten → {blocks: [], blocked_by: []}
+POST   /api/issues/<id>/dependencies   → Abhängigkeit anlegen (body: {target_id, type?: blocks|blocked_by})
+DELETE /api/issues/<id>/dependencies/<target_id> → Abhängigkeit entfernen
 
-GET    /api/ai/status             → KI-Provider-Status + Verfügbarkeit
-POST   /api/ai/chat               → KI-Chat (messages[], project_id?, issue_id?, wiki_slug?)
+GET    /api/issues/<id>/comments       → Kommentare auflisten
+POST   /api/issues/<id>/comments       → Kommentar anlegen (body: {content})
+DELETE /api/issues/<id>/comments/<cid> → Kommentar löschen (nur Autor oder Admin)
 
-GET    /api/projects/<id>/python-scripts   → Scripts auflisten
-POST   /api/projects/<id>/python-scripts   → Script anlegen
-GET/PUT/DELETE /api/python-scripts/<id>    → Script verwalten
-POST   /api/python-scripts/<id>/run        → Vollständig ausführen
-POST   /api/python-scripts/<id>/run-cells  → Bis Zelle N ausführen (Developer Mode, body: {cell_index, cells[]})
-GET    /api/python-scripts/<id>/runs       → Letzte 20 Runs
+GET    /api/issues/<id>/activity       → Aktivitäts-Log des Issues
+POST   /api/issues/<id>/activity/<aid>/revert → Feld-Änderung rückgängig (nur Admin, nicht alle Aktionen reversibel)
 
-GET    /api/projects/<id>/ki-agents        → Agenten auflisten
-POST   /api/projects/<id>/ki-agents        → Agent anlegen
-GET/PUT/DELETE /api/ki-agents/<id>         → Agent verwalten
-POST   /api/ki-agents/<id>/run             → Manuell starten
-GET    /api/ki-agents/<id>/runs            → Letzte 20 Runs
-GET    /api/ki-agents/<id>/files           → Workspace-Dateien auflisten
-GET/DELETE /api/ki-agents/<id>/files/<fn>  → Datei herunterladen / löschen
+POST   /api/issues/<id>/assign-milestone → Milestone zuweisen (body: {milestone_id})
 
-GET    /api/admin/settings/ai           → KI-Konfiguration laden (API-Key maskiert als "***")
-PUT    /api/admin/settings/ai           → KI-Konfiguration speichern
-GET    /api/admin/settings/telegram     → Telegram-Bot-Konfiguration (Token maskiert)
-PUT    /api/admin/settings/telegram     → Telegram-Bot-Konfiguration speichern
-GET    /api/admin/settings/icloud       → iCloud-Konfiguration laden (App-Passwort maskiert)
-PUT    /api/admin/settings/icloud       → iCloud-Konfiguration speichern
+GET    /api/issues/<id>/worklogs       → Worklogs des Issues
+POST   /api/issues/<id>/worklogs       → Worklog anlegen (body: {date: ISO-String, duration_min: int, description?})
+
+GET    /api/issues/<id>/attachments    → Anhänge auflisten
+POST   /api/issues/<id>/attachments    → Datei hochladen (multipart/form-data, field: file)
+```
+
+### Tags (`app/routes/tags.py`)
+```
+GET    /api/tags?project_id=<id>        → Tags des Projekts auflisten
+POST   /api/tags                        → Tag anlegen (body: {name, color, project_id})
+PUT    /api/tags/<id>                   → Tag aktualisieren (body: {name?, color?})
+DELETE /api/tags/<id>                   → Tag löschen
+
+POST   /api/tags/issues/<issue_id>/tags           → Tag zu Issue hinzufügen (body: {tag_id})
+DELETE /api/tags/issues/<issue_id>/tags/<tag_id>  → Tag von Issue entfernen
+```
+
+### Milestones (`app/routes/milestones.py`)
+```
+GET    /api/projects/<id>/milestones  → Milestones des Projekts
+POST   /api/projects/<id>/milestones  → Milestone anlegen (body: {name, description?, start_date?, due_date?})
+GET    /api/milestones/<id>           → Detail inkl. Issues
+PUT    /api/milestones/<id>           → Aktualisieren (body: {name?, description?, due_date?, status?})
+DELETE /api/milestones/<id>           → Löschen
+```
+
+### Worklogs (`app/routes/worklogs.py`)
+```
+PUT    /api/worklogs/<id>             → Worklog aktualisieren (body: {duration_min?, description?, date?})
+DELETE /api/worklogs/<id>             → Worklog löschen
+
+GET    /api/worklogs/pending          → Worklogs die noch bestätigt werden müssen
+POST   /api/worklogs/<id>/confirm     → Auto-Worklog bestätigen
+POST   /api/worklogs/<id>/deny        → Auto-Worklog ablehnen
+
+GET    /api/worklog/summary           → Zusammenfassung (query: ?start=&end= als ISO-Datum) → [{date, total_min, total_h}]
+```
+
+### Anhänge (`app/routes/attachments.py`)
+```
+GET    /api/attachments/<id>/download  → Datei herunterladen (Content-Disposition: attachment)
+GET    /api/attachments/<id>/preview   → Datei inline anzeigen (Content-Disposition: inline, für Bilder/PDFs)
+DELETE /api/attachments/<id>           → Anhang löschen (nur Uploader oder Admin)
+```
+
+### Kalendereinträge (`app/routes/calendar_entries.py`)
+```
+GET    /api/projects/<id>/calendar-entries  → Einträge des Projekts (query: ?start=&end= als ISO)
+POST   /api/calendar-entries                → Eintrag anlegen (body: {title?, start_dt, end_dt, project_id?, issue_id?})
+PUT    /api/calendar-entries/<id>           → Aktualisieren (body: {title?, start_dt?, end_dt?})
+DELETE /api/calendar-entries/<id>           → Löschen
+
+# to_dict() gibt immer title zurück; wenn issue_id gesetzt, wird issue.title als Fallback verwendet
+```
+
+### Kalender-Sync iCloud (`app/routes/calendar_sync.py`)
+```
+GET    /api/calendar/events      → Lokal gespeicherte Events
+POST   /api/calendar/events      → Event anlegen + in iCloud pushen (body: {title, start, end, description?})
+GET    /api/calendar/status      → iCloud-Verbindungsstatus prüfen
+POST   /api/calendar/sync        → iCloud-Events importieren (delta-Sync)
+```
+
+### Suche (`app/routes/search.py`)
+```
+GET    /api/search?q=<query>     → Volltextsuche → {issues: [], comments: [], wiki: []} (min. 2 Zeichen)
+```
+
+### Wiki / Knowledge (`app/routes/wiki.py`, URL-Prefix: `/api/knowledge`)
+```
+GET    /api/knowledge/pages                 → Alle Seiten (query: ?project_id=)
+POST   /api/knowledge/pages                 → Seite anlegen (body: {title, content, slug?, project_id?, parent_id?})
+GET    /api/knowledge/pages/<slug>          → Seite lesen (inkl. gerendetes Markdown + Backlinks)
+PUT    /api/knowledge/pages/<slug>          → Seite aktualisieren (body: {title?, content?, parent_id?})
+DELETE /api/knowledge/pages/<slug>          → Seite löschen
+
+GET    /api/knowledge/search?q=<query>      → Wiki-Volltextsuche
+GET    /api/knowledge/graph?project_id=<id> → Wissens-Graph → {nodes: [], links: []}
+
+POST   /api/knowledge/pages/<slug>/attachments  → Wiki-Anhang hochladen
+GET    /api/knowledge/pages/<slug>/attachments  → Anhänge auflisten
+DELETE /api/knowledge/attachments/<id>           → Wiki-Anhang löschen
+GET    /api/knowledge/attachments/<id>/download  → Wiki-Anhang herunterladen
+GET    /api/knowledge/attachments/<id>/preview   → Wiki-Anhang inline anzeigen
+```
+
+### KI-Assistent (`app/routes/ai.py`)
+```
+GET    /api/ai/status  → Provider-Status + Verfügbarkeit → {provider, model, available, models[]}
+POST   /api/ai/chat    → Chat-Anfrage (body: {messages[], project_id?, issue_id?, wiki_slug?})
+```
+
+### Python Scripts (`app/routes/python_scripts.py`)
+```
+GET    /api/projects/<id>/python-scripts    → Scripts auflisten
+POST   /api/projects/<id>/python-scripts    → Script anlegen (body: {name, code?, description?, schedule_type?})
+GET    /api/python-scripts/<id>             → Script-Detail
+PUT    /api/python-scripts/<id>             → Script aktualisieren
+DELETE /api/python-scripts/<id>             → Script löschen
+POST   /api/python-scripts/<id>/run         → Vollständig ausführen → {run_id, stdout, stderr, exit_code}
+POST   /api/python-scripts/<id>/run-cells   → Bis Zelle N ausführen (body: {cell_index, cells[]})
+GET    /api/python-scripts/<id>/runs        → Letzte 20 Runs
+GET    /api/python-scripts/<id>/files       → Workspace-Dateien auflisten
+GET    /api/python-scripts/<id>/files/<fn>  → Datei herunterladen
+DELETE /api/python-scripts/<id>/files/<fn>  → Datei löschen
+```
+
+### KI-Agenten (`app/routes/ki_agents.py`)
+```
+GET    /api/projects/<id>/ki-agents         → Agenten auflisten
+POST   /api/projects/<id>/ki-agents         → Agent anlegen (body: {name, prompt?, schedule_type?, api_provider?})
+GET    /api/ki-agents/<id>                  → Agent-Detail
+PUT    /api/ki-agents/<id>                  → Agent aktualisieren
+DELETE /api/ki-agents/<id>                  → Agent löschen
+POST   /api/ki-agents/<id>/run              → Manuell starten → {run_id}
+GET    /api/ki-agents/<id>/runs             → Letzte 20 Runs
+GET    /api/ki-agents/<id>/runs/<run_id>    → Einzelnen Run abrufen (für Live-Polling während Agent läuft)
+GET    /api/ki-agents/<id>/files            → Workspace-Dateien auflisten
+GET    /api/ki-agents/<id>/files/<fn>       → Datei herunterladen
+DELETE /api/ki-agents/<id>/files/<fn>       → Datei löschen
+GET    /api/ki-agents/<id>/prompt           → Prompt-Datei lesen → {content}
+PUT    /api/ki-agents/<id>/prompt           → Prompt-Datei schreiben (body: {content})
+POST   /api/ki-agents/<id>/confirm/<token>  → Wartende Aktion bestätigen
+POST   /api/ki-agents/<id>/deny/<token>     → Wartende Aktion ablehnen
+POST   /api/ki-agents/<id>/setup-standard   → Standard-Agenten für Projekt anlegen
+```
+
+### User-Einstellungen (`app/routes/user_settings.py`)
+```
+GET    /api/user/settings   → Eigene Einstellungen laden (KI-Provider, iCloud, etc.)
+PUT    /api/user/settings   → Einstellungen speichern (body: {ai_provider?, claude_api_key?, claude_model?, ...})
+```
+
+### Chat-Workspace (`app/routes/workspace.py`)
+```
+GET    /api/workspace/files             → Dateien im globalen Chat-Workspace auflisten
+GET    /api/workspace/files/<filename>  → Datei lesen
+PUT    /api/workspace/files/<filename>  → Datei schreiben (body: {content})
+DELETE /api/workspace/files/<filename>  → Datei löschen
+```
+
+### Admin (`app/routes/admin.py`, `app/routes/admin_db.py`)
+```
+GET    /api/admin/users                      → Alle User auflisten
+POST   /api/admin/users                      → User anlegen (body: {name, password, is_admin?})
+PUT    /api/admin/users/<id>                 → User aktualisieren (body: {name?, password?, is_admin?})
+DELETE /api/admin/users/<id>                 → User löschen
+
+GET    /api/admin/db/tables                  → Alle DB-Tabellen mit Spalteninfo und Zeilenanzahl
+GET    /api/admin/db/tables/<table>/rows     → Zeilen einer Tabelle (query: ?page=&per_page=&search=)
+PUT    /api/admin/db/tables/<table>/rows/<id>→ Zeile bearbeiten (body: {field: value})
+
+GET    /api/admin/settings/ai               → KI-Konfiguration (API-Key maskiert)
+PUT    /api/admin/settings/ai               → KI-Konfiguration speichern
+GET    /api/admin/settings/telegram         → Telegram-Bot-Konfiguration (Token maskiert)
+PUT    /api/admin/settings/telegram         → Telegram-Konfiguration speichern
+GET    /api/admin/settings/icloud           → iCloud-Konfiguration (App-Passwort maskiert)
+PUT    /api/admin/settings/icloud           → iCloud-Konfiguration speichern
+GET    /api/admin/settings/backup           → Backup-Konfiguration laden
+PUT    /api/admin/settings/backup           → Backup-Konfiguration speichern
+
+GET    /api/admin/backups                   → Verfügbare Backup-Dateien
+POST   /api/admin/backups/run               → Backup manuell auslösen
+GET    /api/admin/backups/<filename>        → Backup-Datei herunterladen
+DELETE /api/admin/backups/<filename>        → Backup-Datei löschen
 ```
 
 ## Wichtige Dateipfade
@@ -264,6 +438,10 @@ axion.read_my_file(filename)               # → str
 # Agent-Workspaces lesen (nur lesen)
 axion.list_agent_workspaces()              # → [{'name': ..., 'files': [...]}]
 axion.read_workspace_file(workspace_name, filename)  # → str
+
+# Andere Script-Workspaces lesen (nur lesen, gleicher project_id)
+axion.list_script_workspaces()             # → [{'name': ..., 'files': [...]}]
+axion.read_script_file(workspace_name, filename)  # → str
 
 # Kalender-Einträge
 axion.create_calendar_entry(title, start_dt, end_dt, issue_id=None)  # start/end_dt als ISO-String

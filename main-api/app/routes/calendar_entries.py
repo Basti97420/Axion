@@ -99,6 +99,7 @@ def create_entry():
         return jsonify({'error': f'Ungültiges Datumsformat: {e}'}), 400
 
     entry = CalendarEntry(
+        title=data.get('title') or None,
         issue_id=issue_id,
         project_id=project_id,
         start_dt=start,
@@ -123,6 +124,9 @@ def update_entry(entry_id):
     data = request.get_json()
 
     old_uid = entry.icloud_uid
+
+    if 'title' in data:
+        entry.title = data['title'] or None
 
     if 'start_dt' in data:
         try:
