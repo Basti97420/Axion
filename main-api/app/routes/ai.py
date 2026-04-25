@@ -493,6 +493,55 @@ def _execute_action(action, user_id, context=None):
         db.session.commit()
         return {'type': 'create_issue', 'issue_id': issue.id, 'title': issue.title}
 
+    # --- Kalender-Aktionen (kein issue_id nötig) ---
+    if action_type == 'create_calendar_entry':
+        from app.models.calendar_entry import CalendarEntry
+        from datetime import datetime as _dt
+        d = action_data
+        title = (d.get('title') or '').strip()
+        start_raw = d.get('start_dt') or ''
+        end_raw = d.get('end_dt') or ''
+        if not start_raw or not end_raw:
+            return {'type': 'error', 'message': 'start_dt und end_dt sind Pflichtfelder (ISO-Format)'}
+        try:
+            start_dt = _dt.fromisoformat(start_raw)
+            end_dt = _dt.fromisoformat(end_raw)
+        except ValueError:
+            return {'type': 'error', 'message': f'Ungültiges Datumsformat: {start_raw} / {end_raw}'}
+        project_id = d.get('project_id') or context.get('project_id')
+        entry = CalendarEntry(
+            title=title or None,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            issue_id=d.get('issue_id'),
+            project_id=int(project_id) if project_id else None,
+        )
+        db.session.add(entry)
+        db.session.commit()
+        return {'type': 'calendar_entry_created', 'id': entry.id, 'title': entry.title,
+                'start_dt': start_raw, 'end_dt': end_raw}
+
+    if action_type == 'list_calendar_entries':
+        from app.models.calendar_entry import CalendarEntry
+        from datetime import datetime as _dt
+        d = action_data
+        project_id = d.get('project_id') or context.get('project_id')
+        q = CalendarEntry.query
+        if project_id:
+            q = q.filter_by(project_id=int(project_id))
+        if d.get('start'):
+            try:
+                q = q.filter(CalendarEntry.start_dt >= _dt.fromisoformat(d['start']))
+            except ValueError:
+                pass
+        if d.get('end'):
+            try:
+                q = q.filter(CalendarEntry.end_dt <= _dt.fromisoformat(d['end']))
+            except ValueError:
+                pass
+        entries = q.order_by(CalendarEntry.start_dt).limit(50).all()
+        return [e.to_dict() for e in entries]
+
     if not issue_id:
         return None
 
@@ -623,55 +672,6 @@ def _execute_action(action, user_id, context=None):
         ))
         db.session.commit()
         return {'type': 'comment_added', 'issue_id': issue.id}
-
-    # --- Kalender-Aktionen ---
-    if action_type == 'create_calendar_entry':
-        from app.models.calendar_entry import CalendarEntry
-        from datetime import datetime as _dt
-        d = action_data
-        title = (d.get('title') or '').strip()
-        start_raw = d.get('start_dt') or ''
-        end_raw = d.get('end_dt') or ''
-        if not start_raw or not end_raw:
-            return {'type': 'error', 'message': 'start_dt und end_dt sind Pflichtfelder (ISO-Format)'}
-        try:
-            start_dt = _dt.fromisoformat(start_raw)
-            end_dt = _dt.fromisoformat(end_raw)
-        except ValueError:
-            return {'type': 'error', 'message': f'Ungültiges Datumsformat: {start_raw} / {end_raw}'}
-        project_id = d.get('project_id') or context.get('project_id')
-        entry = CalendarEntry(
-            title=title or None,
-            start_dt=start_dt,
-            end_dt=end_dt,
-            issue_id=d.get('issue_id'),
-            project_id=int(project_id) if project_id else None,
-        )
-        db.session.add(entry)
-        db.session.commit()
-        return {'type': 'calendar_entry_created', 'id': entry.id, 'title': entry.title,
-                'start_dt': start_raw, 'end_dt': end_raw}
-
-    if action_type == 'list_calendar_entries':
-        from app.models.calendar_entry import CalendarEntry
-        from datetime import datetime as _dt
-        d = action_data
-        project_id = d.get('project_id') or context.get('project_id')
-        q = CalendarEntry.query
-        if project_id:
-            q = q.filter_by(project_id=int(project_id))
-        if d.get('start'):
-            try:
-                q = q.filter(CalendarEntry.start_dt >= _dt.fromisoformat(d['start']))
-            except ValueError:
-                pass
-        if d.get('end'):
-            try:
-                q = q.filter(CalendarEntry.end_dt <= _dt.fromisoformat(d['end']))
-            except ValueError:
-                pass
-        entries = q.order_by(CalendarEntry.start_dt).limit(50).all()
-        return [e.to_dict() for e in entries]
 
     return None
 
