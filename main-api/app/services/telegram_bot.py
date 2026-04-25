@@ -44,6 +44,7 @@ BOT_COMMANDS = [
     ('bug',    'Bug melden: /bug Beschreibung'),
     ('issues', 'Letzte offene Issues anzeigen'),
     ('done',   'Issue abschließen: /done 42'),
+    ('attach', 'Datei einem Issue zuordnen: /attach 94'),
     ('suche',  'Issues durchsuchen: /suche Stichwort'),
     ('status', 'Projektstatistik anzeigen'),
     ('ki',     'KI-Assistent fragen: /ki Was sind offene Bugs?'),
@@ -51,6 +52,35 @@ BOT_COMMANDS = [
     ('confirm', 'Agent-Aktion bestätigen: /confirm AgentID'),
     ('deny',   'Agent-Aktion ablehnen: /deny AgentID'),
 ]
+
+# ---------------------------------------------------------------------------
+# Attach-Session State (in-memory, per chat_id)
+# ---------------------------------------------------------------------------
+
+_attach_sessions: dict = {}  # {chat_id: {'issue_id': int, 'expires_at': datetime}}
+SESSION_TTL_MINUTES = 30
+
+
+def _get_attach_session(chat_id: str):
+    """Gibt die aktive Issue-ID der Session zurück oder None (bei Ablauf)."""
+    entry = _attach_sessions.get(chat_id)
+    if not entry:
+        return None
+    if datetime.utcnow() > entry['expires_at']:
+        del _attach_sessions[chat_id]
+        return None
+    return entry['issue_id']
+
+
+def _set_attach_session(chat_id: str, issue_id: int) -> None:
+    _attach_sessions[chat_id] = {
+        'issue_id': issue_id,
+        'expires_at': datetime.utcnow() + timedelta(minutes=SESSION_TTL_MINUTES),
+    }
+
+
+def _clear_attach_session(chat_id: str) -> None:
+    _attach_sessions.pop(chat_id, None)
 
 
 # ---------------------------------------------------------------------------
@@ -247,12 +277,18 @@ def _cmd_hilfe(token: str, chat_id: str) -> None:
         '/bug &lt;Titel&gt; – Bug melden (Priorität: Hoch)\n'
         '/issues – Letzte offene Issues anzeigen\n'
         '/done &lt;ID&gt; – Issue als erledigt markieren\n'
+        '/attach &lt;ID&gt; – Dateisession starten (alle folgenden Bilder/Dateien → Issue)\n'
+        '/attach stop – Dateisession beenden\n'
         '/suche &lt;Begriff&gt; – Issues durchsuchen\n'
         '/status – Projektstatistik\n'
         '/ki &lt;Frage&gt; – KI-Assistent fragen\n'
         '/confirm &lt;AgentID&gt; – Agent-Aktion bestätigen\n'
         '/deny &lt;AgentID&gt; – Agent-Aktion ablehnen\n'
         '/hilfe – Diese Hilfe anzeigen\n\n'
+        '📎 <b>Dateien anhängen:</b>\n'
+        '• Bild/Datei mit <code>#94</code> in der Bildunterschrift → direkt an Issue #94\n'
+        '• Link + <code>#94</code> im Text → als Kommentar zu Issue #94\n'
+        '• Bild/Datei ohne Referenz → neues Issue wird erstellt\n\n'
         '💡 Oder einfach eine Frage schreiben – die KI antwortet direkt.'
     )
     _send(token, chat_id, text)
@@ -542,6 +578,193 @@ def _cmd_ki(token: str, chat_id: str, frage: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Telegram-Datei-Anhänge (Bilder, Dokumente, Links)
+# ---------------------------------------------------------------------------
+
+def _extract_issue_id(text: str):
+    """Extrahiert #ID aus einem Text. Gibt int oder None zurück."""
+    import re
+    m = re.search(r'#(\d+)', text or '')
+    return int(m.group(1)) if m else None
+
+
+def _download_tg_file(token: str, file_id: str):
+    """Lädt eine Datei über die Telegram getFile-API herunter.
+    Gibt (bytes, original_filename, mime_type) zurück."""
+    r = requests.get(f'{_base(token)}/getFile', params={'file_id': file_id}, timeout=15)
+    r.raise_for_status()
+    file_path = r.json()['result']['file_path']
+    data = requests.get(
+        f'https://api.telegram.org/file/bot{token}/{file_path}',
+        timeout=60,
+    )
+    data.raise_for_status()
+    filename = file_path.split('/')[-1]
+    mime = data.headers.get('Content-Type', 'application/octet-stream').split(';')[0].strip()
+    return data.content, filename, mime
+
+
+def _save_tg_attachment(issue_id: int, file_bytes: bytes, original_name: str, mime_type: str):
+    """Speichert Datei in instance/uploads/ und legt Attachment-DB-Eintrag an."""
+    import uuid as _uuid
+    from flask import current_app
+    from app import db
+    from app.models.attachment import Attachment
+    from app.models.user import User
+
+    ext = os.path.splitext(original_name)[1].lower() or '.bin'
+    uid = str(_uuid.uuid4())
+    filename = f'{uid}{ext}'
+    upload_dir = os.path.join(current_app.instance_path, 'uploads')
+    os.makedirs(upload_dir, exist_ok=True)
+    with open(os.path.join(upload_dir, filename), 'wb') as f:
+        f.write(file_bytes)
+
+    admin = User.query.filter_by(is_admin=True).first()
+    att = Attachment(
+        issue_id=issue_id,
+        filename=filename,
+        original_name=original_name,
+        size=len(file_bytes),
+        mime_type=mime_type,
+        uploader_id=admin.id if admin else 1,
+    )
+    db.session.add(att)
+    db.session.commit()
+    return att
+
+
+def _handle_media(msg: dict, token: str, chat_id: str) -> None:
+    """Verarbeitet eingehende Foto- oder Dokument-Nachrichten."""
+    from app import db
+    from app.models.issue import Issue
+    from app.models.user import User
+
+    caption = (msg.get('caption') or '').strip()
+
+    # file_id + original_name ermitteln
+    if msg.get('photo'):
+        file_id = msg['photo'][-1]['file_id']  # letztes Element = größte Auflösung
+        original_name = 'foto.jpg'
+    elif msg.get('document'):
+        doc = msg['document']
+        file_id = doc['file_id']
+        original_name = doc.get('file_name', 'datei.bin')
+    else:
+        return
+
+    cfg = load_tg_config()
+
+    # Issue-ID ermitteln: 1) Caption (#ID), 2) aktive Session
+    issue_id = _extract_issue_id(caption) or _get_attach_session(chat_id)
+
+    if not issue_id:
+        # Kein Issue referenziert → neues Issue erstellen
+        project_id = cfg.get('default_project_id')
+        if not project_id:
+            _send(token, chat_id,
+                  '⚠ Kein Ziel-Issue angegeben (kein <code>#ID</code> in Bildunterschrift, keine aktive Session) '
+                  'und kein Standard-Projekt konfiguriert.\n'
+                  'Tipp: /attach 94 zum Starten einer Session.')
+            return
+        admin = User.query.filter_by(is_admin=True).first()
+        title = caption or f'Telegram-Upload {datetime.utcnow().strftime("%Y-%m-%d %H:%M")}'
+        issue = Issue(
+            project_id=int(project_id),
+            title=title[:200],
+            status='open',
+            priority='medium',
+            type='task',
+            creator_id=admin.id if admin else 1,
+        )
+        db.session.add(issue)
+        db.session.commit()
+        issue_id = issue.id
+        _send(token, chat_id, f'📌 Neues Issue <b>#{issue_id}</b> erstellt: „{title}"')
+    else:
+        issue = Issue.query.get(issue_id)
+        if not issue:
+            _send(token, chat_id, f'❌ Issue #{issue_id} nicht gefunden.')
+            return
+
+    # Datei herunterladen + speichern
+    try:
+        file_bytes, tg_filename, mime = _download_tg_file(cfg['bot_token'], file_id)
+        # Bei Fotos den echten Dateinamen vom Server verwenden
+        name = tg_filename if original_name == 'foto.jpg' else original_name
+        _save_tg_attachment(issue_id, file_bytes, name, mime)
+        # Session-TTL erneuern (ermöglicht weitere Dateien)
+        if _get_attach_session(chat_id):
+            _set_attach_session(chat_id, issue_id)
+        issue_obj = Issue.query.get(issue_id)
+        _send(token, chat_id,
+              f'📎 Datei „{name}" an Issue <b>#{issue_id}</b> „{issue_obj.title}" angehängt.')
+    except Exception as e:
+        logger.error('Telegram Datei-Download Fehler: %s', e)
+        _send(token, chat_id, f'❌ Fehler beim Anhängen der Datei: {e}')
+
+
+def _handle_link(token: str, chat_id: str, url: str, issue_id: int) -> None:
+    """Hängt eine URL als Kommentar an ein Issue."""
+    from app import db
+    from app.models.issue import Issue
+    from app.models.comment import Comment
+    from app.models.user import User
+
+    issue = Issue.query.get(issue_id)
+    if not issue:
+        _send(token, chat_id, f'❌ Issue #{issue_id} nicht gefunden.')
+        return
+    admin = User.query.filter_by(is_admin=True).first()
+    comment = Comment(
+        issue_id=issue_id,
+        content=f'🔗 Link von Telegram: {url}',
+        author_id=admin.id if admin else 1,
+    )
+    db.session.add(comment)
+    db.session.commit()
+    _send(token, chat_id,
+          f'💬 Link als Kommentar zu Issue <b>#{issue_id}</b> „{issue.title}" hinzugefügt.')
+
+
+def _cmd_attach(token: str, chat_id: str, arg: str) -> None:
+    """/attach [ID|stop] — Session-Verwaltung für Datei-Anhänge."""
+    arg = arg.strip()
+
+    if arg == 'stop':
+        _clear_attach_session(chat_id)
+        _send(token, chat_id, '✅ Session beendet. Dateien werden nicht mehr automatisch zugeordnet.')
+        return
+
+    if not arg:
+        issue_id = _get_attach_session(chat_id)
+        if issue_id:
+            _send(token, chat_id,
+                  f'📎 Aktive Session: Dateien → Issue <b>#{issue_id}</b>\n'
+                  f'/attach stop zum Beenden · Timeout: {SESSION_TTL_MINUTES} Min.')
+        else:
+            _send(token, chat_id,
+                  '⚠ Keine aktive Session.\n'
+                  'Nutzung: <code>/attach 94</code> – alle folgenden Bilder/Dateien → Issue #94')
+        return
+
+    if not arg.isdigit():
+        _send(token, chat_id, '⚠ Bitte eine Issue-ID angeben: /attach 94')
+        return
+
+    from app.models.issue import Issue
+    issue = Issue.query.get(int(arg))
+    if not issue:
+        _send(token, chat_id, f'❌ Issue #{arg} nicht gefunden.')
+        return
+
+    _set_attach_session(chat_id, issue.id)
+    _send(token, chat_id,
+          f'📎 Session aktiv: Alle Bilder/Dateien → Issue <b>#{issue.id}</b> „{issue.title}"\n'
+          f'Timeout: {SESSION_TTL_MINUTES} Minuten · /attach stop zum Beenden.')
+
+
+# ---------------------------------------------------------------------------
 # Human-in-the-Loop command handlers
 # ---------------------------------------------------------------------------
 
@@ -588,13 +811,23 @@ def _cmd_agent_deny(token: str, chat_id: str, arg: str) -> None:
 # ---------------------------------------------------------------------------
 
 def _handle(msg: dict, token: str, chat_id: str) -> None:
+    import re
+
+    # --- Medien-Nachrichten (Foto, Dokument) zuerst prüfen ---
+    if msg.get('photo') or msg.get('document'):
+        _handle_media(msg, token, chat_id)
+        return
+
     text = (msg.get('text') or '').strip()
     if not text:
         return
     # Log incoming message for KI context
     _log_telegram_message(chat_id, text, 'incoming')
+
     if text.startswith('/hilfe') or text == '/start':
         _cmd_hilfe(token, chat_id)
+    elif text.startswith('/attach'):
+        _cmd_attach(token, chat_id, text[7:].strip())
     elif text.startswith('/issue '):
         _cmd_issue(token, chat_id, text[7:])
     elif text == '/issue':
@@ -624,7 +857,13 @@ def _handle(msg: dict, token: str, chat_id: str) -> None:
     elif text.startswith('/deny '):
         _cmd_agent_deny(token, chat_id, text[6:].strip())
     elif not text.startswith('/'):
-        _cmd_ki(token, chat_id, text)
+        # URL + #ID im Text → Link als Kommentar anhängen
+        url_m = re.search(r'https?://\S+', text)
+        id_m = _extract_issue_id(text)
+        if url_m and id_m:
+            _handle_link(token, chat_id, url_m.group().rstrip('.,)'), id_m)
+        else:
+            _cmd_ki(token, chat_id, text)
     else:
         _send(token, chat_id, '❓ Unbekannter Befehl. Tippe /hilfe für eine Übersicht.')
 

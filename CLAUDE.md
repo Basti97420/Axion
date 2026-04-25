@@ -473,8 +473,11 @@ Interne Endpunkte (Token: `X-Script-Token`):
 
 - **Service**: `main-api/app/services/telegram_bot.py` – läuft als Daemon-Thread beim Start
 - **Konfiguration**: `main-api/instance/settings.env` – Token + Chat-ID via `/settings` (Admin) konfigurierbar
-- **Befehle**: `/issue`, `/bug`, `/issues`, `/done`, `/status`, `/suche`, `/ki`, `/hilfe`
-- **Plain-Text → KI**: Nachrichten ohne `/` werden direkt an den KI-Assistenten weitergeleitet
+- **Befehle**: `/issue`, `/bug`, `/issues`, `/done`, `/attach`, `/status`, `/suche`, `/ki`, `/hilfe`
+- **Datei-Anhänge**: Bild/Datei mit `#94` in der Bildunterschrift → direkt an Issue #94 angehängt; ohne Referenz → neues Issue erstellt
+- **Session-Modus**: `/attach 94` → alle folgenden Dateien gehen an Issue #94 (30 Min TTL); `/attach stop` beendet Session
+- **Links**: Text mit URL + `#94` → Link wird als Kommentar zu Issue #94 gespeichert
+- **Plain-Text → KI**: Nachrichten ohne `/` (und ohne URL+#ID) werden direkt an den KI-Assistenten weitergeleitet
 - **Push-Notifications**: `tg.notify()` nach Issue-Erstellung, Status-Wechsel und Agent-Completion (konfigurierbar)
 - **Batched Notifications**: `notify()` reiht Nachrichten in `_notify_queue` ein; Flush-Thread sendet alle N Minuten gebündelt als eine Nachricht. Bei `TELEGRAM_NOTIFY_INTERVAL_MIN=0` wird sofort gesendet.
 - **Python-Script-Integration**: `axion.notify_telegram(message)` → `POST /api/internal/script/notify` → `tg.notify()`
