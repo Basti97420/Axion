@@ -334,7 +334,7 @@ def _get_ai_reply(messages, config_override=None, return_usage=False):
         chat_messages = [m for m in messages if m['role'] != 'system']
         response = client.messages.create(
             model=cfg['claude_model'],
-            max_tokens=1024,
+            max_tokens=cfg.get('max_tokens', 4096),
             system=system,
             messages=chat_messages,
         )

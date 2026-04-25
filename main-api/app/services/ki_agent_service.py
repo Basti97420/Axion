@@ -436,13 +436,20 @@ Du kannst folgende Aktionen ausführen:
 - add_comment: Kommentar zu einem Issue hinzufügen
 - set_assignee: Issue zuweisen
 - set_due_date: Fälligkeitsdatum setzen
-- add_worklog: Arbeitszeit erfassen
+- add_worklog: Arbeitszeit erfassen (date als ISO-Datum, duration_min als Minuten)
 - create_wiki_page: Wiki-Seite erstellen
 - update_wiki_page: Wiki-Seite aktualisieren
 - create_milestone: Meilenstein erstellen
 - update_milestone: Bestehenden Meilenstein aktualisieren
 - assign_milestone: Issue einem Meilenstein zuweisen
-- create_file: Datei im Workspace erstellen (.md, .txt, .csv)
+- create_tag: Neuen Tag im Projekt erstellen
+- add_tag: Existierenden Tag zu einem Issue hinzufügen (tag_id aus dem Kontext)
+- remove_tag: Tag von einem Issue entfernen
+- create_subtask: Unteraufgabe zu einem Issue erstellen
+- set_dependency: Abhängigkeit zwischen Issues setzen
+- create_calendar_entry: Kalender-Eintrag erstellen (title, start_dt, end_dt im ISO-Format)
+- save_memory: Inhalt dauerhaft in einer Datei im Chat-Workspace speichern
+- create_file: Datei im Agenten-Workspace erstellen (.md, .txt, .csv)
 - trigger_agent: Anderen Agenten im Projekt starten
 - trigger_self: Eigenen neuen Run starten (nur wenn 15 Schritte nicht reichen — vorher memory.md aktualisieren!). ACHTUNG: trigger_self funktioniert NUR in manuellen oder scheduler-gestarteten Runs, NICHT in bereits durch chain gestarteten Runs (Endlosschutz).
 
@@ -451,7 +458,10 @@ Du kannst folgende Aktionen ausführen:
 - read_issue: Ein Issue vollständig lesen inkl. Kommentare
 - read_wiki_page: Eine Wiki-Seite lesen
 - search_wiki: Wiki nach einem Begriff durchsuchen
+- list_wiki_pages: Alle Wiki-Seiten des Projekts auflisten
 - list_projects: Alle Projekte auflisten
+- list_calendar_entries: Kalendereinträge des Projekts auflisten (optional: start, end als ISO-Datum)
+- read_memory: Eine gespeicherte Memory-Datei lesen
 
 Antworte IMMER als valides JSON:
 {"reply": "Zusammenfassung was du getan hast", "action": null}
@@ -463,17 +473,27 @@ Oder mit Aktion:
 {"reply": "...", "action": {"type": "add_comment", "issue_id": 5, "data": {"content": "..."}}}
 {"reply": "...", "action": {"type": "set_assignee", "issue_id": 5, "data": {"assignee_id": 2}}}
 {"reply": "...", "action": {"type": "set_due_date", "issue_id": 5, "data": {"due_date": "2026-04-15"}}}
-{"reply": "...", "action": {"type": "add_worklog", "issue_id": 5, "data": {"hours": 2.5, "description": "Arbeit"}}}
+{"reply": "...", "action": {"type": "add_worklog", "issue_id": 5, "data": {"date": "2026-04-26", "duration_min": 90, "description": "Arbeit"}}}
 {"reply": "...", "action": {"type": "create_milestone", "data": {"name": "v1.0", "due_date": "2026-05-01"}}}
 {"reply": "...", "action": {"type": "update_milestone", "data": {"milestone_id": 2, "name": "v2.0", "due_date": "2026-06-01"}}}
 {"reply": "...", "action": {"type": "assign_milestone", "issue_id": 5, "data": {"milestone_id": 2}}}
+{"reply": "...", "action": {"type": "create_tag", "data": {"name": "urgent", "color": "#ef4444"}}}
+{"reply": "...", "action": {"type": "add_tag", "issue_id": 5, "data": {"tag_id": 3}}}
+{"reply": "...", "action": {"type": "remove_tag", "issue_id": 5, "data": {"tag_id": 3}}}
+{"reply": "...", "action": {"type": "create_subtask", "issue_id": 5, "data": {"title": "Sub-Aufgabe"}}}
+{"reply": "...", "action": {"type": "set_dependency", "issue_id": 5, "data": {"target_id": 7, "type": "blocks"}}}
+{"reply": "...", "action": {"type": "create_calendar_entry", "data": {"title": "Meeting", "start_dt": "2026-05-01T10:00:00", "end_dt": "2026-05-01T11:00:00"}}}
 {"reply": "...", "action": {"type": "create_wiki_page", "data": {"title": "...", "content": "Markdown"}}}
+{"reply": "...", "action": {"type": "save_memory", "data": {"filename": "todo.md", "content": "# Offene Punkte\n- ..."}}}
 {"reply": "...", "action": {"type": "create_file", "data": {"filename": "bericht.md", "content": "# Inhalt"}}}
 {"reply": "...", "action": {"type": "trigger_agent", "data": {"agent_id": 2}}}
 {"reply": "Ich starte mich neu...", "action": {"type": "trigger_self", "data": {"reason": "Mehr als 15 Schritte nötig"}}}
 {"reply": "Ich suche...", "action": {"type": "search_issues", "data": {"query": "login", "status": "open"}}}
 {"reply": "Ich lese...", "action": {"type": "read_issue", "data": {"issue_id": 5}}}
 {"reply": "Ich lese...", "action": {"type": "read_wiki_page", "data": {"slug": "seitenname"}}}
+{"reply": "Ich liste Wiki-Seiten...", "action": {"type": "list_wiki_pages", "data": {}}}
+{"reply": "Ich liste Termine...", "action": {"type": "list_calendar_entries", "data": {"start": "2026-05-01", "end": "2026-05-31"}}}
+{"reply": "Ich lese Memory...", "action": {"type": "read_memory", "data": {"filename": "todo.md"}}}
 
 Status-Werte: open, in_progress, hold, in_review, done, cancelled
 Prioritäten: low, medium, high, critical

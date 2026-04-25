@@ -595,6 +595,22 @@ export default function UserSettingsPage() {
                     </div>
                   </>
                 )}
+                <div>
+                  <label className={labelClass}>Max. Tokens pro Antwort</label>
+                  <input
+                    type="number"
+                    min="256"
+                    max="32768"
+                    step="256"
+                    value={aiForm.max_tokens ?? 4096}
+                    onChange={(e) => {
+                      const v = parseInt(e.target.value) || 4096
+                      setAi('max_tokens', Math.max(256, Math.min(32768, v)))
+                    }}
+                    className={fieldClass}
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Maximale Länge einer KI-Antwort in Tokens (Standard: 4096). Höhere Werte helfen bei komplexen Agenten-Aufgaben.</p>
+                </div>
                 <SaveRow saving={aiSaving} message={aiMessage} />
               </form>
             )}

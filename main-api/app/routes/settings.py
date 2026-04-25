@@ -9,12 +9,17 @@ bp = Blueprint('settings', __name__, url_prefix='/api/admin/settings')
 def load_ai_config() -> dict:
     """Lädt die KI-Konfiguration aus settings.env."""
     from app.services.settings_env import read
+    try:
+        max_tokens = int(read('AI_MAX_TOKENS', os.getenv('AI_MAX_TOKENS', '4096')))
+    except (ValueError, TypeError):
+        max_tokens = 4096
     return {
         'provider':       read('AI_PROVIDER',   os.getenv('AI_PROVIDER',   'ollama')),
         'ollama_url':     read('OLLAMA_URL', os.getenv('OLLAMA_URL', 'http://localhost:11434')),
         'ollama_model':   read('OLLAMA_MODEL',   os.getenv('OLLAMA_MODEL',   'llama3.2')),
         'claude_api_key': read('CLAUDE_API_KEY', os.getenv('CLAUDE_API_KEY', '')),
         'claude_model':   read('CLAUDE_MODEL',   os.getenv('CLAUDE_MODEL',   'claude-sonnet-4-6')),
+        'max_tokens':     max_tokens,
     }
 
 
@@ -27,6 +32,11 @@ def save_ai_config(config: dict):
     if config.get('claude_api_key'):
         write('CLAUDE_API_KEY', config['claude_api_key'])
     write('CLAUDE_MODEL', config.get('claude_model', ''))
+    try:
+        mt = max(256, min(32768, int(config.get('max_tokens', 4096))))
+    except (ValueError, TypeError):
+        mt = 4096
+    write('AI_MAX_TOKENS', str(mt))
 
 
 def _mask(config: dict) -> dict:
@@ -57,7 +67,7 @@ def update_ai_config():
     data = request.get_json() or {}
     config = load_ai_config()
 
-    allowed = {'provider', 'ollama_url', 'ollama_model', 'claude_api_key', 'claude_model'}
+    allowed = {'provider', 'ollama_url', 'ollama_model', 'claude_api_key', 'claude_model', 'max_tokens'}
     for key in allowed:
         if key in data:
             if key == 'claude_api_key' and data[key] == '***':
